@@ -2,7 +2,7 @@
 name = "wi-mesh-login"
 version = "0.1.0"
 edition = "2024"
-description = "A quick Bash script for logging into Wi-MESH (VN) captive portal on Linux headless server"
+description = "A quick CLI for logging into Wi-MESH (VN) captive portal on Linux headless server"
 license = "MIT"
 repository = "https://github.com/akaduy/wi-mesh-login"
 
