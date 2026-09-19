@@ -18,7 +18,7 @@ const LOGOUT_URL: &str = "https://login.net.vn/logout";
 const USER_AGENT: &str = "Mozilla/5.0";
 
 #[derive(Debug, Parser)]
-#[command(about = "Log in to ex.login.net.vn throug CLI")]
+#[command(about = "Log in to ex.login.net.vn through CLI")]
 struct Args {
     /// Captive portal detection URL (https://en.wikipedia.org/wiki/Captive_portal#Detection)
     #[arg(long, default_value = ENTRY_URL)]
