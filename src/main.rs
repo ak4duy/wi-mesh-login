@@ -102,11 +102,11 @@ fn main() -> Result<()> {
     let username = args
         .username
         .as_deref()
-        .expect("clap requires a username when not logging out");
+        .expect("clap requires a username");
     let password = args
         .password
         .as_deref()
-        .expect("clap requires a password when not logging out");
+        .expect("clap requires a password");
 
     artifacts.write_log("[1/5] Checking internet connectivity...");
     if internet_ok(&client) {
@@ -140,16 +140,21 @@ fn main() -> Result<()> {
         .send()
         .context("posting login form")?;
     let login_body = response.text().context("reading login response")?;
-    fs::write(&artifacts.response, login_body)?;
+    fs::write(&artifacts.response, &login_body)?;
 
     artifacts.write_log("[5/5] Testing internet connectivity...");
     thread::sleep(Duration::from_secs(2));
     if internet_ok(&client) {
         artifacts.write_log("Internet connectivity works.");
         Ok(())
+    } else if login_body.contains("Total traffic limit reached!") {
+        bail!(
+            "Card has reached the limits, please use another one. Debug artifacts: {}",
+            artifacts.directory.display()
+        )
     } else {
         bail!(
-            "login was posted, but internet connectivity still failed. Debug artifacts: {}",
+            "Login was posted, but internet connectivity still failed. Debug artifacts: {}",
             artifacts.directory.display()
         )
     }
@@ -301,7 +306,7 @@ mod tests {
     }
 
     #[test]
-    fn login_requires_both_credentials() {
+    fn login() {
         assert!(Args::try_parse_from(["wi-mesh-login", "alice"]).is_err());
     }
 
