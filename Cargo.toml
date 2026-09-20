@@ -1,6 +1,6 @@
 [package]
 name = "wi-mesh-login"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A quick CLI for logging into Wi-MESH (VN) captive portal on Linux headless server"
 license = "MIT"
