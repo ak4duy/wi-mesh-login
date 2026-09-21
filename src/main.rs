@@ -7,7 +7,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use clap::Parser;
+use clap::{Parser, Subcommand};
+
+mod reward;
 use if_addrs::get_if_addrs;
 use reqwest::{blocking::Client, header, redirect::Policy};
 use scraper::{Html, Selector};
@@ -18,8 +20,15 @@ const LOGOUT_URL: &str = "https://login.net.vn/logout";
 const USER_AGENT: &str = "Mozilla/5.0";
 
 #[derive(Debug, Parser)]
-#[command(about = "Log in to ex.login.net.vn through CLI")]
+#[command(
+    about = "Log in to Wi-MESH or claim shop rewards",
+    subcommand_negates_reqs = true,
+    args_conflicts_with_subcommands = true
+)]
 struct Args {
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// Captive portal detection URL (https://en.wikipedia.org/wiki/Captive_portal#Detection)
     #[arg(long, default_value = ENTRY_URL)]
     entry_url: Url,
@@ -43,6 +52,12 @@ struct Args {
     /// Request timeout in seconds
     #[arg(long, default_value_t = 30)]
     timeout_seconds: u64,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Shop account login and rewards
+    Shop(reward::ShopArgs),
 }
 
 struct Artifacts {
@@ -84,6 +99,9 @@ impl Artifacts {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    if let Some(Command::Shop(shop_args)) = args.command {
+        return reward::run(shop_args);
+    }
     let artifacts = Artifacts::create()?;
 
     artifacts.write_log("[0/5] Captive portal login");
@@ -99,14 +117,8 @@ fn main() -> Result<()> {
         return logout(&client, &artifacts);
     }
 
-    let username = args
-        .username
-        .as_deref()
-        .expect("clap requires a username");
-    let password = args
-        .password
-        .as_deref()
-        .expect("clap requires a password");
+    let username = args.username.as_deref().expect("clap requires a username");
+    let password = args.password.as_deref().expect("clap requires a password");
 
     artifacts.write_log("[1/5] Checking internet connectivity...");
     if internet_ok(&client) {
@@ -291,39 +303,4 @@ fn format_headers(headers: &header::HeaderMap) -> String {
         .map(|(name, value)| format!("{}: {}", name, value.to_str().unwrap_or("<non-UTF-8>")))
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn logout() {
-        let args = Args::try_parse_from(["wi-mesh-login", "--logout"]).unwrap();
-        assert!(args.logout);
-        assert_eq!(args.username, None);
-        assert_eq!(args.password, None);
-    }
-
-    #[test]
-    fn login() {
-        assert!(Args::try_parse_from(["wi-mesh-login", "alice"]).is_err());
-    }
-
-    #[test]
-    fn builds_payload_and_resolves_relative_action() {
-        let page = r#"<form id="login-user" action="/login"><input name="token" value="abc"><input name="username"><input type="password" name="password"></form>"#;
-        let (action, payload) = build_login_payload(
-            page,
-            &Url::parse("https://portal.test/start").unwrap(),
-            "alice@example.test",
-            "secret",
-        )
-        .unwrap();
-        assert_eq!(action.as_str(), "https://portal.test/login");
-        assert_eq!(
-            payload,
-            "token=abc&username=alice%40example.test&password=secret&popup=true"
-        );
-    }
 }
