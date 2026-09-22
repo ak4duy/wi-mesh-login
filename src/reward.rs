@@ -180,24 +180,22 @@ fn load_credentials() -> Result<(String, String)> {
     Ok((phone.to_owned(), password.to_owned()))
 }
 
-pub fn run(args: ShopArgs) -> Result<()> {
-    if args.forget {
-        credential_entry()?
-            .delete_credential()
-            .context("deleting saved shop credentials")?;
-        println!("Saved shop credentials deleted.");
-        return Ok(());
-    }
-    let (phone, password) = if args.login {
-        prompt_credentials()?
-    } else {
-        load_credentials()?
-    };
-    let directory = match args.state_dir {
-        Some(path) => path,
+pub(crate) struct AuthenticatedSession {
+    pub(crate) client: Client,
+    pub(crate) device: String,
+    pub(crate) token: String,
+}
+
+fn authenticate(
+    phone: &str,
+    password: &str,
+    state_dir: Option<&std::path::Path>,
+) -> Result<AuthenticatedSession> {
+    let directory = match state_dir {
+        Some(path) => path.to_owned(),
         None => default_state_dir()?,
     };
-    let device = device_id(&directory, &phone)?;
+    let device = device_id(&directory, phone)?;
     let client = Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(Policy::none())
@@ -220,9 +218,37 @@ pub fn run(args: ShopArgs) -> Result<()> {
         "login",
         &device,
         initial_token,
-        &[("phone", &phone), ("password", &password_hash)],
+        &[("phone", phone), ("password", &password_hash)],
     )?;
     let authenticated = token(&data(&login)?["Token"])?;
+    Ok(AuthenticatedSession {
+        client,
+        device,
+        token: authenticated.to_owned(),
+    })
+}
+
+pub(crate) fn authenticate_saved(
+    state_dir: Option<&std::path::Path>,
+) -> Result<AuthenticatedSession> {
+    let (phone, password) = load_credentials()?;
+    authenticate(&phone, &password, state_dir)
+}
+
+pub fn run(args: ShopArgs) -> Result<()> {
+    if args.forget {
+        credential_entry()?
+            .delete_credential()
+            .context("deleting saved shop credentials")?;
+        println!("Saved shop credentials deleted.");
+        return Ok(());
+    }
+    let (phone, password) = if args.login {
+        prompt_credentials()?
+    } else {
+        load_credentials()?
+    };
+    let session = authenticate(&phone, &password, args.state_dir.as_deref())?;
     if args.login {
         save_credentials(&phone, &password)?;
         #[cfg(target_os = "windows")]
@@ -231,7 +257,13 @@ pub fn run(args: ShopArgs) -> Result<()> {
         println!("Shop login successful, saved in OS credential store");
         return Ok(());
     }
-    let rewards = post(&client, "rewards", &device, authenticated, &[])?;
+    let rewards = post(
+        &session.client,
+        "rewards",
+        &session.device,
+        &session.token,
+        &[],
+    )?;
     let tasks = data(&rewards)?["Tasks"]
         .as_array()
         .context("rewards response missing Tasks")?;
@@ -255,10 +287,10 @@ pub fn run(args: ShopArgs) -> Result<()> {
             .filter(|s| !s.is_empty())
             .context("task missing key")?;
         let reply = post(
-            &client,
+            &session.client,
             "get-score",
-            &device,
-            authenticated,
+            &session.device,
+            &session.token,
             &[("key", key)],
         )?;
         if reply["result"] == false
