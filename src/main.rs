@@ -10,6 +10,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 
 mod reward;
+mod usage;
 use if_addrs::get_if_addrs;
 use reqwest::{blocking::Client, header, redirect::Policy};
 use scraper::{Html, Selector};
@@ -37,11 +38,11 @@ struct Args {
     #[arg(long)]
     interface: Option<String>,
 
-    /// Wi-MESH username
+    /// Card pin
     #[arg(required_unless_present = "logout", conflicts_with = "logout")]
     username: Option<String>,
 
-    /// Wi-MESH password
+    /// Card password
     #[arg(required_unless_present = "logout", conflicts_with = "logout")]
     password: Option<String>,
 
@@ -58,6 +59,8 @@ struct Args {
 enum Command {
     /// Shop account login and rewards
     Shop(reward::ShopArgs),
+    /// Query MyWIFI card usage
+    Usage(usage::UsageArgs),
 }
 
 struct Artifacts {
@@ -99,8 +102,10 @@ impl Artifacts {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    if let Some(Command::Shop(shop_args)) = args.command {
-        return reward::run(shop_args);
+    match args.command {
+        Some(Command::Shop(shop_args)) => return reward::run(shop_args),
+        Some(Command::Usage(usage_args)) => return usage::run(usage_args),
+        None => {}
     }
     let artifacts = Artifacts::create()?;
 
