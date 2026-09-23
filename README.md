@@ -66,14 +66,29 @@ Options include:
 > **Each account has randomly generated device ID under**
 
 ### On Linux
+
 ```sh
 $XDG_STATE_HOME/wi-mesh-login/reward
 ~/.local/state/wi-mesh-login/reward
 ```
 
 ### On Windows
+
 ```sh
 %LOCALAPPDATA%\wi-mesh-login\reward
 ```
 
 You can change the folder by `shop --state-dir PATH/TO/FOLDER`
+
+## Card usage
+
+> [!IMPORTANT]  
+> **Run `wi-mesh-login shop --login` once to save your shop credentials before using this command**
+
+```sh
+# Query one card with card pin
+wi-mesh-login usage CARD_PIN
+
+# Query multiple cards and include sessions.
+wi-mesh-login usage --sessions CARD_PIN_1 CARD_PIN_2
+```
