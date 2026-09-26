@@ -50,6 +50,10 @@ struct Args {
     #[arg(long)]
     logout: bool,
 
+    /// Post login without logs, debug artifacts, or connectivity checks
+    #[arg(long, conflicts_with = "logout")]
+    no_logs: bool,
+
     /// Request timeout in seconds
     #[arg(long, default_value_t = 30)]
     timeout_seconds: u64,
@@ -107,6 +111,31 @@ fn main() -> Result<()> {
         Some(Command::Usage(usage_args)) => return usage::run(usage_args),
         None => {}
     }
+
+    if args.no_logs {
+        let client = build_client(&args)?;
+        let username = args.username.as_deref().expect("clap requires a username");
+        let password = args.password.as_deref().expect("clap requires a password");
+        let response = client
+            .get(args.entry_url.clone())
+            .send()
+            .context("loading captive portal page")?;
+        let page_url = response.url().clone();
+        let page = response.text().context("reading captive portal page")?;
+        let (action, payload) = build_login_payload(&page, &page_url, username, password)?;
+        client
+            .post(action)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(header::ORIGIN, "https://login.net.vn")
+            .header(header::REFERER, "https://login.net.vn/login")
+            .body(payload)
+            .send()
+            .context("posting login form")?
+            .error_for_status()
+            .context("login request returned an HTTP error")?;
+        return Ok(());
+    }
+
     let artifacts = Artifacts::create()?;
 
     artifacts.write_log("[0/5] Captive portal login");

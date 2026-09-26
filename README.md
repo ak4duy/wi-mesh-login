@@ -15,6 +15,8 @@ It is not intended to bypass payment, authentication, access control, or network
 
 ```sh
 wi-mesh-login YOUR_USERNAME YOUR_PASSWORD
+
+wi-mesh-login YOUR_USERNAME YOUR_PASSWORD --no-logs
 ```
 
 Use `wi-mesh-login --help` to see command-line options. The usage is:
@@ -26,12 +28,13 @@ wi-mesh-login [OPTIONS] --logout
 
 Options include:
 
-| Option              | Purpose                        |
-| ------------------- | ------------------------------ |
-| `--interface`       | Adapter name to use            |
-| `--entry-url`       | Captive-portal probe URL       |
-| `--timeout-seconds` | HTTP timeout                   |
-| `--logout`          | End the current portal session |
+| Option              | Purpose                                                          |
+| ------------------- | ---------------------------------------------------------------- |
+| `--interface`       | Adapter name to use                                              |
+| `--entry-url`       | Captive-portal probe URL                                         |
+| `--timeout-seconds` | HTTP timeout                                                     |
+| `--logout`          | End the current portal session                                   |
+| `--no-logs`         | Post login without logs, debug artifacts, or connectivity checks |
 
 ## Shop commands
 
