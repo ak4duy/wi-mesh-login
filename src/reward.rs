@@ -196,11 +196,18 @@ fn authenticate(
         None => default_state_dir()?,
     };
     let device = device_id(&directory, phone)?;
-    let client = Client::builder()
+    let mut builder = Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(Policy::none())
-        .user_agent("Mozilla/5.0")
-        .build()?;
+        .user_agent("Mozilla/5.0");
+    if let Some(path) = std::env::var_os("WI_MESH_CA_CERT") {
+        let path = PathBuf::from(path);
+        let pem = fs::read(&path)
+            .with_context(|| format!("reading CA certificate {}", path.display()))?;
+        let cert = reqwest::Certificate::from_pem(&pem).context("parsing PEM CA certificate")?;
+        builder = builder.add_root_certificate(cert);
+    }
+    let client = builder.build()?;
     let device_info = json!({"Id":"", "Code":"", "UserId":0, "DeviceName":"WEB_APP", "DeviceId":device,
         "OS":"WEB", "OSVersion":"", "AppVersion":"1.0", "Network":"WIFI", "Type":"LAPTOP", "Status":"",
         "CreatedAt":0, "UpdatedAt":0, "DeletedAt":0, "ExpiredAt":0}).to_string();
