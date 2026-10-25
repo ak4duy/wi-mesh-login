@@ -1,0 +1,11 @@
+[Unit]
+Description=Claim daily Wi-MESH shop reward
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/wi-mesh-login shop --reward
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

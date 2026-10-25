@@ -1,0 +1,12 @@
+[Unit]
+Description=Wi-MESH Auto Login
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/wi-mesh-login --auto --interval 60 --retry-after 10 --no-logs
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
