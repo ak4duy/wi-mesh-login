@@ -1,3 +1,10 @@
+## [Unreleased]
+
+### Features
+
+- feat(auto): add `--once`, `--attempts`, `--ssid`, `--current-ssid` and `--state-dir` for event-driven auto login on Android
+- feat(reward): use a private file credential store on Android, keyring stays on Linux and Windows
+
 ## [0.3.4] - 2026-10-25
 
 ### Features

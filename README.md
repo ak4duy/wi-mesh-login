@@ -20,6 +20,9 @@ wi-mesh-login YOUR_USERNAME YOUR_PASSWORD --no-logs
 
 # Keep running: check internet every 60s, log in with the first in-use card when offline
 wi-mesh-login --auto --interval 60 --retry-after 10 --no-logs
+
+# Check once, log in if offline (up to 3 attempts), then exit
+wi-mesh-login --auto --once --retry-after 10 --attempts 3 --no-logs
 ```
 
 Use `wi-mesh-login --help` to see command-line options. The usage is:
@@ -27,6 +30,7 @@ Use `wi-mesh-login --help` to see command-line options. The usage is:
 ```text
 wi-mesh-login [OPTIONS] <USERNAME> <PASSWORD>
 wi-mesh-login [OPTIONS] --auto [--interval SECONDS] [--retry-after SECONDS]
+wi-mesh-login [OPTIONS] --auto --once [--retry-after SECONDS] [--attempts N]
 wi-mesh-login [OPTIONS] --logout
 ```
 
@@ -42,6 +46,26 @@ Options include:
 | `--auto`            | Keep running, re-login with the first in-use card when offline   |
 | `--interval`        | Seconds between internet checks in `--auto` mode (default 60)    |
 | `--retry-after`     | Seconds before retrying a failed `--auto` login (default 10)     |
+| `--once`            | Check once, log in if offline, retry, then exit (no polling)     |
+| `--attempts`        | Login attempts before `--once` gives up (default 3)              |
+| `--ssid`            | Allowed Wi-Fi name for `--auto`, repeatable (default: Wi-MESH)   |
+| `--current-ssid`    | Connected Wi-Fi name, passed by the caller (required on Android) |
+| `--state-dir`       | Directory for shop credentials, cached card and device IDs       |
+
+## Android
+
+Polling drains the battery, so on Android run `--once` from a `ConnectivityManager.NetworkCallback`
+or WorkManager job when Wi-Fi connects. Rust cannot read the SSID on Android, so the app passes it:
+
+```sh
+wi-mesh-login --auto --once --current-ssid "$SSID" --state-dir "$FILES_DIR/wi-mesh" --no-logs
+```
+
+- If `--current-ssid` is not in the `--ssid` allowlist (default `Wi-MESH 2.4G` and `Wi-MESH 5G`),
+  it exits 0 without any network request. Without `--current-ssid`, it does nothing on Android.
+- Android has no OS keyring backend, so shop credentials live in `credentials` (`PHONE\nPASSWORD`)
+  inside `--state-dir` (or `WI_MESH_LOGIN_STATE_DIR`). Point it at the app's private files dir and
+  let the app wrap it with Android Keystore. Linux and Windows still use the OS credential store.
 
 ## Shop commands
 
