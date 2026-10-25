@@ -54,8 +54,12 @@ struct Args {
     #[arg(long, conflicts_with = "logout")]
     auto: bool,
 
-    /// Retry auto login after this many seconds on failure
-    #[arg(long, value_name = "SECONDS", requires = "auto")]
+    /// Seconds between internet checks in auto mode [default: 60]
+    #[arg(long, value_name = "SECONDS", conflicts_with_all = ["username", "logout"])]
+    interval: Option<u64>,
+
+    /// Seconds to wait before retrying a failed auto login [default: 10]
+    #[arg(long, value_name = "SECONDS", conflicts_with_all = ["username", "logout"])]
     retry_after: Option<u64>,
 
     /// Post login without logs, debug artifacts, or connectivity checks
@@ -126,25 +130,25 @@ fn main() -> Result<()> {
     }
 
     if args.auto {
+        let interval = Duration::from_secs(args.interval.unwrap_or(60));
+        let retry_after = args.retry_after.unwrap_or(10);
+        let client = build_client(&args)?;
+        let _ = reward::fetch_active_card(None);
+        println!(
+            "Auto login running, checking every {}s. Press Ctrl+C to stop.",
+            interval.as_secs()
+        );
         loop {
-            let (card, cached) = match reward::fetch_active_card(None) {
-                Ok(card) => (Ok(card), false),
-                Err(error) => {
-                    eprintln!("Shop unreachable ({error:#}), using cached card.");
-                    (reward::cached_card(), true)
-                }
-            };
-            let result = card.and_then(|(pin, pass)| login(&args, &pin, &pass));
-            if result.is_ok() && cached {
-                let _ = reward::fetch_active_card(None);
+            if internet_ok(&client) {
+                thread::sleep(interval);
+                continue;
             }
-            match (result, args.retry_after) {
-                (Ok(()), _) => return Ok(()),
-                (Err(error), Some(seconds)) => {
-                    eprintln!("Auto login failed: {error:#}. Retrying in {seconds}s...");
-                    thread::sleep(Duration::from_secs(seconds));
+            match auto_login(&args) {
+                Ok(()) => thread::sleep(interval),
+                Err(error) => {
+                    eprintln!("Auto login failed: {error:#}. Retrying in {retry_after}s...");
+                    thread::sleep(Duration::from_secs(retry_after));
                 }
-                (Err(error), None) => return Err(error),
             }
         }
     }
@@ -152,6 +156,21 @@ fn main() -> Result<()> {
     let username = args.username.as_deref().expect("clap requires a username");
     let password = args.password.as_deref().expect("clap requires a password");
     login(&args, username, password)
+}
+
+fn auto_login(args: &Args) -> Result<()> {
+    let (card, cached) = match reward::fetch_active_card(None) {
+        Ok(card) => (card, false),
+        Err(error) => {
+            eprintln!("Shop unreachable ({error:#}), using cached card.");
+            (reward::cached_card()?, true)
+        }
+    };
+    login(args, &card.0, &card.1)?;
+    if cached {
+        let _ = reward::fetch_active_card(None);
+    }
+    Ok(())
 }
 
 fn start_artifacts(args: &Args) -> Result<Artifacts> {
