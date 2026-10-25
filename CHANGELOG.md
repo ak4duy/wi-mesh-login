@@ -1,3 +1,17 @@
+## [0.3.4] - 2026-10-25
+
+### Features
+
+- feat(systemd): add auto login service and daily reward timer and service 4ad2f6a 
+
+### Miscellaneous
+
+- ci: add GitHub Actions workflows for CI and release ec98f3e 
+- chore: release v0.3.4 547f21d 
+- ci: install dbus deps and apply rustfmt 9cb8572 
+
+
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.3.3...v0.3.4
 ## [0.3.3] - 2026-10-25
 
 ### Features
@@ -8,22 +22,37 @@
 
 - docs(readme): document auto mode interval and retry defaults 47c3fe2 
 
+### Miscellaneous
 
-#### Full Changelog: v0.3.2...v0.3.3
+- chore: release v0.3.3 1c11f9b 
+
+
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.3.2...v0.3.3
 ## [0.3.2] - 2026-10-25
 
 ### Features
 
-- feat: add no-logs login option 060640a 
 - feat(reward): fallback to file-based storage for credentials 06fd773 
 - feat: add `--auto` and `--retry-after` flags for automatic login 2934164 
+
+### Miscellaneous
+
+- chore: release v0.3.2 0f57c6a 
+
+
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.3.1...v0.3.2
+## [0.3.1] - 2026-09-26
+
+### Features
+
+- feat: add no-logs login option 060640a 
 
 ### Miscellaneous
 
 - chore: bump version to 0.3.1 35698b6 
 
 
-#### Full Changelog: v0.3.0...v0.3.2
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.3.0...v0.3.1
 ## [0.3.0] - 2026-09-23
 
 ### Features
@@ -44,7 +73,7 @@
 - chore: bump version to 0.3.0 bf9fb4f 
 
 
-#### Full Changelog: v0.2.0...v0.3.0
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.2.0...v0.3.0
 ## [0.2.0] - 2026-09-21
 
 ### Features
@@ -58,7 +87,7 @@
 - chore: bump wi-mesh-login version to 0.2.0 6e3b4ba 
 
 
-#### Full Changelog: v0.1.1...v0.2.0
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.1.1...v0.2.0
 ## [0.1.1] - 2026-09-20
 
 ### Bug Fixes
@@ -72,7 +101,7 @@
 - chore: bump wi-mesh-login version to 0.1.1 9b39d76 
 
 
-#### Full Changelog: v0.1.0...v0.1.1
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.1.0...v0.1.1
 ## [0.1.0] - 2026-09-17
 
 ### Features
