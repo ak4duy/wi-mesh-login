@@ -161,16 +161,61 @@ fn prompt_credentials() -> Result<(String, String)> {
     Ok((phone, password))
 }
 
+fn credential_file() -> Result<PathBuf> {
+    Ok(default_state_dir()?.join("credentials"))
+}
+
 fn save_credentials(phone: &str, password: &str) -> Result<()> {
-    credential_entry()?
-        .set_password(&format!("{phone}\n{password}"))
-        .context("saving shop credentials in the operating system credential store")
+    let stored = format!("{phone}\n{password}");
+    let keyring_result = credential_entry()
+        .and_then(|entry| {
+            entry
+                .set_password(&stored)
+                .context("saving shop credentials in the operating system credential store")
+        });
+    let path = credential_file()?;
+    fs::create_dir_all(path.parent().context("credential file has no parent")?)?;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options
+        .open(&path)
+        .and_then(|mut file| file.write_all(stored.as_bytes()))
+        .with_context(|| format!("writing {}", path.display()))?;
+    keyring_result.or(Ok(()))
+}
+
+fn delete_credentials() -> Result<()> {
+    let keyring_result = credential_entry().and_then(|entry| {
+        entry
+            .delete_credential()
+            .context("deleting saved shop credentials")
+    });
+    let file_result = match fs::remove_file(credential_file()?) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    };
+    file_result.context("deleting saved credentials file")?;
+    keyring_result.or_else(|error| match error.downcast_ref::<keyring::Error>() {
+        Some(keyring::Error::NoEntry) => Ok(()),
+        _ => Err(error),
+    })
 }
 
 fn load_credentials() -> Result<(String, String)> {
-    let stored = credential_entry()?
-        .get_password()
-        .context("loading saved shop credentials, run `wi-mesh-login shop --login` first")?;
+    let stored = match credential_entry().and_then(|entry| {
+        entry
+            .get_password()
+            .context("loading saved shop credentials")
+    }) {
+        Ok(stored) => stored,
+        Err(_) => fs::read_to_string(credential_file()?)
+            .context("loading saved shop credentials, run `wi-mesh-login shop --login` first")?,
+    };
     let (phone, password) = stored
         .split_once('\n')
         .context("saved shop credentials have an invalid format, run `shop --login` again")?;
@@ -237,9 +282,7 @@ pub(crate) fn authenticate_saved(
 
 pub fn run(args: ShopArgs) -> Result<()> {
     if args.forget {
-        credential_entry()?
-            .delete_credential()
-            .context("deleting saved shop credentials")?;
+        delete_credentials()?;
         println!("Saved shop credentials deleted.");
         return Ok(());
     }
