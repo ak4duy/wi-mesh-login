@@ -1,10 +1,10 @@
 [package]
 name = "wi-mesh-login"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 description = "A quick CLI for logging into Wi-MESH (VN) and claim rewards"
 license = "MIT"
-repository = "https://github.com/akaduy/wi-mesh-login"
+repository = "https://github.com/ak4duy/wi-mesh-login"
 
 [dependencies]
 anyhow = "1.0"
