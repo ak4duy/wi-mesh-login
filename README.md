@@ -18,15 +18,15 @@ wi-mesh-login YOUR_USERNAME YOUR_PASSWORD
 
 wi-mesh-login YOUR_USERNAME YOUR_PASSWORD --no-logs
 
-# Use the first card in use from the saved shop account, retry every 30s on failure
-wi-mesh-login --auto --retry-after 30
+# Keep running: check internet every 60s, log in with the first in-use card when offline
+wi-mesh-login --auto --interval 60 --retry-after 10 --no-logs
 ```
 
 Use `wi-mesh-login --help` to see command-line options. The usage is:
 
 ```text
 wi-mesh-login [OPTIONS] <USERNAME> <PASSWORD>
-wi-mesh-login [OPTIONS] --auto [--retry-after SECONDS]
+wi-mesh-login [OPTIONS] --auto [--interval SECONDS] [--retry-after SECONDS]
 wi-mesh-login [OPTIONS] --logout
 ```
 
@@ -39,8 +39,9 @@ Options include:
 | `--timeout-seconds` | HTTP timeout                                                     |
 | `--logout`          | End the current portal session                                   |
 | `--no-logs`         | Post login without logs, debug artifacts, or connectivity checks |
-| `--auto`            | Log in with the first in-use card (cached for offline use)      |
-| `--retry-after`     | Seconds to wait before retrying a failed `--auto` login          |
+| `--auto`            | Keep running, re-login with the first in-use card when offline   |
+| `--interval`        | Seconds between internet checks in `--auto` mode (default 60)    |
+| `--retry-after`     | Seconds before retrying a failed `--auto` login (default 10)     |
 
 ## Shop commands
 
