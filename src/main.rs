@@ -39,16 +39,24 @@ struct Args {
     interface: Option<String>,
 
     /// Card pin
-    #[arg(required_unless_present = "logout", conflicts_with = "logout")]
+    #[arg(required_unless_present_any = ["logout", "auto"], conflicts_with_all = ["logout", "auto"])]
     username: Option<String>,
 
     /// Card password
-    #[arg(required_unless_present = "logout", conflicts_with = "logout")]
+    #[arg(required_unless_present_any = ["logout", "auto"], conflicts_with_all = ["logout", "auto"])]
     password: Option<String>,
 
     /// Logout of Wi-MESH
     #[arg(long)]
     logout: bool,
+
+    /// Log in with the first card in use from the saved shop account
+    #[arg(long, conflicts_with = "logout")]
+    auto: bool,
+
+    /// Retry auto login after this many seconds on failure
+    #[arg(long, value_name = "SECONDS", requires = "auto")]
+    retry_after: Option<u64>,
 
     /// Post login without logs, debug artifacts, or connectivity checks
     #[arg(long, conflicts_with = "logout")]
@@ -112,10 +120,54 @@ fn main() -> Result<()> {
         None => {}
     }
 
+    if args.logout {
+        let artifacts = start_artifacts(&args)?;
+        return logout(&build_client(&args)?, &artifacts);
+    }
+
+    if args.auto {
+        loop {
+            let (card, cached) = match reward::fetch_active_card(None) {
+                Ok(card) => (Ok(card), false),
+                Err(error) => {
+                    eprintln!("Shop unreachable ({error:#}), using cached card.");
+                    (reward::cached_card(), true)
+                }
+            };
+            let result = card.and_then(|(pin, pass)| login(&args, &pin, &pass));
+            if result.is_ok() && cached {
+                let _ = reward::fetch_active_card(None);
+            }
+            match (result, args.retry_after) {
+                (Ok(()), _) => return Ok(()),
+                (Err(error), Some(seconds)) => {
+                    eprintln!("Auto login failed: {error:#}. Retrying in {seconds}s...");
+                    thread::sleep(Duration::from_secs(seconds));
+                }
+                (Err(error), None) => return Err(error),
+            }
+        }
+    }
+
+    let username = args.username.as_deref().expect("clap requires a username");
+    let password = args.password.as_deref().expect("clap requires a password");
+    login(&args, username, password)
+}
+
+fn start_artifacts(args: &Args) -> Result<Artifacts> {
+    let artifacts = Artifacts::create()?;
+    artifacts.write_log("[0/5] Captive portal login");
+    artifacts.write_log(format!(
+        "interface: {}",
+        args.interface.as_deref().unwrap_or("default route")
+    ));
+    artifacts.write_log(format!("artifacts: {}", artifacts.directory.display()));
+    Ok(artifacts)
+}
+
+fn login(args: &Args, username: &str, password: &str) -> Result<()> {
     if args.no_logs {
-        let client = build_client(&args)?;
-        let username = args.username.as_deref().expect("clap requires a username");
-        let password = args.password.as_deref().expect("clap requires a password");
+        let client = build_client(args)?;
         let response = client
             .get(args.entry_url.clone())
             .send()
@@ -136,23 +188,8 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let artifacts = Artifacts::create()?;
-
-    artifacts.write_log("[0/5] Captive portal login");
-    artifacts.write_log(format!(
-        "interface: {}",
-        args.interface.as_deref().unwrap_or("default route")
-    ));
-    artifacts.write_log(format!("artifacts: {}", artifacts.directory.display()));
-
-    let client = build_client(&args)?;
-
-    if args.logout {
-        return logout(&client, &artifacts);
-    }
-
-    let username = args.username.as_deref().expect("clap requires a username");
-    let password = args.password.as_deref().expect("clap requires a password");
+    let artifacts = start_artifacts(args)?;
+    let client = build_client(args)?;
 
     artifacts.write_log("[1/5] Checking internet connectivity...");
     if internet_ok(&client) {

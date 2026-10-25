@@ -165,16 +165,12 @@ fn credential_file() -> Result<PathBuf> {
     Ok(default_state_dir()?.join("credentials"))
 }
 
-fn save_credentials(phone: &str, password: &str) -> Result<()> {
-    let stored = format!("{phone}\n{password}");
-    let keyring_result = credential_entry()
-        .and_then(|entry| {
-            entry
-                .set_password(&stored)
-                .context("saving shop credentials in the operating system credential store")
-        });
-    let path = credential_file()?;
-    fs::create_dir_all(path.parent().context("credential file has no parent")?)?;
+fn card_file() -> Result<PathBuf> {
+    Ok(default_state_dir()?.join("card"))
+}
+
+fn write_private(path: &std::path::Path, contents: &str) -> Result<()> {
+    fs::create_dir_all(path.parent().context("file has no parent directory")?)?;
     let mut options = fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
@@ -183,9 +179,20 @@ fn save_credentials(phone: &str, password: &str) -> Result<()> {
         options.mode(0o600);
     }
     options
-        .open(&path)
-        .and_then(|mut file| file.write_all(stored.as_bytes()))
-        .with_context(|| format!("writing {}", path.display()))?;
+        .open(path)
+        .and_then(|mut file| file.write_all(contents.as_bytes()))
+        .with_context(|| format!("writing {}", path.display()))
+}
+
+fn save_credentials(phone: &str, password: &str) -> Result<()> {
+    let stored = format!("{phone}\n{password}");
+    let keyring_result = credential_entry()
+        .and_then(|entry| {
+            entry
+                .set_password(&stored)
+                .context("saving shop credentials in the operating system credential store")
+        });
+    write_private(&credential_file()?, &stored)?;
     keyring_result.or(Ok(()))
 }
 
@@ -278,6 +285,43 @@ pub(crate) fn authenticate_saved(
 ) -> Result<AuthenticatedSession> {
     let (phone, password) = load_credentials()?;
     authenticate(&phone, &password, state_dir)
+}
+
+pub(crate) fn cached_card() -> Result<(String, String)> {
+    let stored = fs::read_to_string(card_file()?)
+        .context("no cached card, run `wi-mesh-login --auto` once while online")?;
+    let (pin, pass) = stored
+        .split_once('\n')
+        .filter(|(pin, pass)| !pin.is_empty() && !pass.is_empty())
+        .context("cached card has an invalid format")?;
+    Ok((pin.to_owned(), pass.to_owned()))
+}
+
+pub(crate) fn fetch_active_card(state_dir: Option<&std::path::Path>) -> Result<(String, String)> {
+    let session = authenticate_saved(state_dir)?;
+    let reply = post(
+        &session.client,
+        "mycards",
+        &session.device,
+        &session.token,
+        &[("page", "1")],
+    )?;
+    let card = data(&reply)?
+        .as_array()
+        .context("mycards response missing card list")?
+        .iter()
+        .find(|card| card["Status"] == "Thẻ Đang Sử Dụng")
+        .context("no card in use found in shop account")?;
+    let pin = card["Pin"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .context("card missing Pin")?;
+    let pass = card["Pass"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .context("card missing Pass")?;
+    write_private(&card_file()?, &format!("{pin}\n{pass}"))?;
+    Ok((pin.to_owned(), pass.to_owned()))
 }
 
 pub fn run(args: ShopArgs) -> Result<()> {

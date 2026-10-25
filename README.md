@@ -17,12 +17,16 @@ It is not intended to bypass payment, authentication, access control, or network
 wi-mesh-login YOUR_USERNAME YOUR_PASSWORD
 
 wi-mesh-login YOUR_USERNAME YOUR_PASSWORD --no-logs
+
+# Use the first card in use from the saved shop account, retry every 30s on failure
+wi-mesh-login --auto --retry-after 30
 ```
 
 Use `wi-mesh-login --help` to see command-line options. The usage is:
 
 ```text
 wi-mesh-login [OPTIONS] <USERNAME> <PASSWORD>
+wi-mesh-login [OPTIONS] --auto [--retry-after SECONDS]
 wi-mesh-login [OPTIONS] --logout
 ```
 
@@ -35,6 +39,8 @@ Options include:
 | `--timeout-seconds` | HTTP timeout                                                     |
 | `--logout`          | End the current portal session                                   |
 | `--no-logs`         | Post login without logs, debug artifacts, or connectivity checks |
+| `--auto`            | Log in with the first in-use card (cached for offline use)      |
+| `--retry-after`     | Seconds to wait before retrying a failed `--auto` login          |
 
 ## Shop commands
 
