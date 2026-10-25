@@ -16,6 +16,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: release-plz/action@v0.5.144
         with:
           command: release

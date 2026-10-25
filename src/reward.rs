@@ -186,12 +186,11 @@ fn write_private(path: &std::path::Path, contents: &str) -> Result<()> {
 
 fn save_credentials(phone: &str, password: &str) -> Result<()> {
     let stored = format!("{phone}\n{password}");
-    let keyring_result = credential_entry()
-        .and_then(|entry| {
-            entry
-                .set_password(&stored)
-                .context("saving shop credentials in the operating system credential store")
-        });
+    let keyring_result = credential_entry().and_then(|entry| {
+        entry
+            .set_password(&stored)
+            .context("saving shop credentials in the operating system credential store")
+    });
     write_private(&credential_file()?, &stored)?;
     keyring_result.or(Ok(()))
 }
