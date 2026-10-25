@@ -7,12 +7,24 @@ use std::{
     fs,
     io::{self, IsTerminal, Write},
     path::PathBuf,
+    sync::OnceLock,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 const API: &str = "https://shop.login.net.vn/apimobi/v1";
+#[cfg(not(target_os = "android"))]
 const CREDENTIAL_SERVICE: &str = "wi-mesh-login";
+#[cfg(not(target_os = "android"))]
 const CREDENTIAL_USER: &str = "shop";
+/// Overrides the state directory, e.g. an Android app's private files dir
+const STATE_DIR_ENV: &str = "WI_MESH_LOGIN_STATE_DIR";
+
+static STATE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Use `path` for credentials, the cached card and device IDs
+pub(crate) fn set_state_dir(path: PathBuf) {
+    let _ = STATE_DIR.set(path);
+}
 
 #[derive(Debug, Args)]
 #[command(about = "Log in to the Wi-MESH shop or claim points")]
@@ -122,6 +134,12 @@ fn device_id(directory: &std::path::Path, phone: &str) -> Result<String> {
 }
 
 fn default_state_dir() -> Result<PathBuf> {
+    if let Some(path) = STATE_DIR.get() {
+        return Ok(path.clone());
+    }
+    if let Some(path) = std::env::var_os(STATE_DIR_ENV).filter(|path| !path.is_empty()) {
+        return Ok(PathBuf::from(path));
+    }
     #[cfg(windows)]
     let root = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
@@ -130,10 +148,13 @@ fn default_state_dir() -> Result<PathBuf> {
     let root = std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))
-        .context("set --state-dir when HOME/XDG_STATE_HOME are unavailable")?;
+        .with_context(|| {
+            format!("set --state-dir or {STATE_DIR_ENV} when HOME/XDG_STATE_HOME are unavailable")
+        })?;
     Ok(root.join("wi-mesh-login").join("reward"))
 }
 
+#[cfg(not(target_os = "android"))]
 fn credential_entry() -> Result<keyring::Entry> {
     keyring::Entry::new(CREDENTIAL_SERVICE, CREDENTIAL_USER)
         .context("opening the operating system credential store")
@@ -184,6 +205,29 @@ fn write_private(path: &std::path::Path, contents: &str) -> Result<()> {
         .with_context(|| format!("writing {}", path.display()))
 }
 
+// Android has no keyring backend: the private credentials file is the store,
+// so the app can keep it in its sandbox and wrap it with Android Keystore.
+#[cfg(target_os = "android")]
+fn save_credentials(phone: &str, password: &str) -> Result<()> {
+    write_private(&credential_file()?, &format!("{phone}\n{password}"))
+}
+
+#[cfg(target_os = "android")]
+fn delete_credentials() -> Result<()> {
+    match fs::remove_file(credential_file()?) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
+    .context("deleting saved credentials file")
+}
+
+#[cfg(target_os = "android")]
+fn load_stored_credentials() -> Result<String> {
+    fs::read_to_string(credential_file()?)
+        .context("loading saved shop credentials, run `wi-mesh-login shop --login` first")
+}
+
+#[cfg(not(target_os = "android"))]
 fn save_credentials(phone: &str, password: &str) -> Result<()> {
     let stored = format!("{phone}\n{password}");
     let keyring_result = credential_entry().and_then(|entry| {
@@ -195,6 +239,7 @@ fn save_credentials(phone: &str, password: &str) -> Result<()> {
     keyring_result.or(Ok(()))
 }
 
+#[cfg(not(target_os = "android"))]
 fn delete_credentials() -> Result<()> {
     let keyring_result = credential_entry().and_then(|entry| {
         entry
@@ -212,16 +257,21 @@ fn delete_credentials() -> Result<()> {
     })
 }
 
-fn load_credentials() -> Result<(String, String)> {
-    let stored = match credential_entry().and_then(|entry| {
+#[cfg(not(target_os = "android"))]
+fn load_stored_credentials() -> Result<String> {
+    match credential_entry().and_then(|entry| {
         entry
             .get_password()
             .context("loading saved shop credentials")
     }) {
-        Ok(stored) => stored,
+        Ok(stored) => Ok(stored),
         Err(_) => fs::read_to_string(credential_file()?)
-            .context("loading saved shop credentials, run `wi-mesh-login shop --login` first")?,
-    };
+            .context("loading saved shop credentials, run `wi-mesh-login shop --login` first"),
+    }
+}
+
+fn load_credentials() -> Result<(String, String)> {
+    let stored = load_stored_credentials()?;
     let (phone, password) = stored
         .split_once('\n')
         .context("saved shop credentials have an invalid format, run `shop --login` again")?;
@@ -341,6 +391,8 @@ pub fn run(args: ShopArgs) -> Result<()> {
         println!("Shop login successful, saved in Credential Manager");
         #[cfg(target_os = "linux")]
         println!("Shop login successful, saved in OS credential store");
+        #[cfg(target_os = "android")]
+        println!("Shop login successful, saved in the state directory");
         return Ok(());
     }
     let rewards = post(
