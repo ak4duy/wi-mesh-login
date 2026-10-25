@@ -19,6 +19,7 @@ use url::{Url, form_urlencoded};
 const ENTRY_URL: &str = "http://connectivitycheck.gstatic.com/generate_204";
 const LOGOUT_URL: &str = "https://login.net.vn/logout";
 const USER_AGENT: &str = "Mozilla/5.0";
+const WI_MESH_SSIDS: [&str; 2] = ["Wi-MESH 2.4G", "Wi-MESH 5G"];
 
 #[derive(Debug, Parser)]
 #[command(
@@ -61,6 +62,31 @@ struct Args {
     /// Seconds to wait before retrying a failed auto login [default: 10]
     #[arg(long, value_name = "SECONDS", conflicts_with_all = ["username", "logout"])]
     retry_after: Option<u64>,
+
+    /// Check once, log in if offline, retry on failure, then exit (no polling)
+    #[arg(long, requires = "auto", conflicts_with = "interval")]
+    once: bool,
+
+    /// Login attempts before `--once` gives up [default: 3]
+    #[arg(
+        long,
+        value_name = "N",
+        requires = "once",
+        value_parser = clap::value_parser!(u32).range(1..)
+    )]
+    attempts: Option<u32>,
+
+    /// Wi-Fi name auto mode may act on (repeatable)
+    #[arg(long = "ssid", value_name = "NAME", default_values = WI_MESH_SSIDS)]
+    ssids: Vec<String>,
+
+    /// Wi-Fi name the device is connected to, passed by the caller (required on Android)
+    #[arg(long, value_name = "NAME", requires = "auto")]
+    current_ssid: Option<String>,
+
+    /// Directory for saved shop credentials, cached card and device IDs
+    #[arg(long, value_name = "DIR", requires = "auto")]
+    state_dir: Option<PathBuf>,
 
     /// Post login without logs, debug artifacts, or connectivity checks
     #[arg(long, conflicts_with = "logout")]
@@ -130,8 +156,17 @@ fn main() -> Result<()> {
     }
 
     if args.auto {
+        if let Some(state_dir) = &args.state_dir {
+            reward::set_state_dir(state_dir.clone());
+        }
+        if !ssid_allowed(&args) {
+            return Ok(());
+        }
+        let retry_after = Duration::from_secs(args.retry_after.unwrap_or(10));
+        if args.once {
+            return auto_once(&args, retry_after, args.attempts.unwrap_or(3));
+        }
         let interval = Duration::from_secs(args.interval.unwrap_or(60));
-        let retry_after = args.retry_after.unwrap_or(10);
         let client = build_client(&args)?;
         let _ = reward::fetch_active_card(None);
         println!(
@@ -146,8 +181,11 @@ fn main() -> Result<()> {
             match auto_login(&args) {
                 Ok(()) => thread::sleep(interval),
                 Err(error) => {
-                    eprintln!("Auto login failed: {error:#}. Retrying in {retry_after}s...");
-                    thread::sleep(Duration::from_secs(retry_after));
+                    eprintln!(
+                        "Auto login failed: {error:#}. Retrying in {}s...",
+                        retry_after.as_secs()
+                    );
+                    thread::sleep(retry_after);
                 }
             }
         }
@@ -156,6 +194,50 @@ fn main() -> Result<()> {
     let username = args.username.as_deref().expect("clap requires a username");
     let password = args.password.as_deref().expect("clap requires a password");
     login(&args, username, password)
+}
+
+/// Gate auto mode on the Wi-Fi name; without `--current-ssid` only Android skips
+fn ssid_allowed(args: &Args) -> bool {
+    let Some(current) = args.current_ssid.as_deref() else {
+        if cfg!(target_os = "android") {
+            println!("No --current-ssid given, skipping auto login.");
+            return false;
+        }
+        return true;
+    };
+    // Android's WifiInfo.getSSID() wraps the name in quotes
+    let current = current
+        .strip_prefix('"')
+        .and_then(|name| name.strip_suffix('"'))
+        .unwrap_or(current);
+    if args.ssids.iter().any(|ssid| ssid == current) {
+        return true;
+    }
+    println!("Wi-Fi '{current}' is not in the --ssid list, skipping auto login.");
+    false
+}
+
+/// One-shot auto login for event-driven callers such as an Android NetworkCallback
+fn auto_once(args: &Args, retry_after: Duration, attempts: u32) -> Result<()> {
+    let client = build_client(args)?;
+    for attempt in 1..=attempts {
+        if internet_ok(&client) {
+            println!("Internet connectivity already works.");
+            return Ok(());
+        }
+        match auto_login(args) {
+            Ok(()) => return Ok(()),
+            Err(error) if attempt < attempts => {
+                eprintln!(
+                    "Auto login failed ({attempt}/{attempts}): {error:#}. Retrying in {}s...",
+                    retry_after.as_secs()
+                );
+                thread::sleep(retry_after);
+            }
+            Err(error) => return Err(error.context(format!("auto login failed {attempts} times"))),
+        }
+    }
+    unreachable!("attempts is at least 1")
 }
 
 fn auto_login(args: &Args) -> Result<()> {
