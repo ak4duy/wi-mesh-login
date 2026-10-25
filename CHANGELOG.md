@@ -1,3 +1,15 @@
+## [0.3.3] - 2026-10-25
+
+### Features
+
+- feat(auto): keep running and re-login when offline 42d9e29 
+
+### Documentation
+
+- docs(readme): document auto mode interval and retry defaults 47c3fe2 
+
+
+#### Full Changelog: v0.3.2...v0.3.3
 ## [0.3.2] - 2026-10-25
 
 ### Features
