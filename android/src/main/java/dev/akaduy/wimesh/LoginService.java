@@ -11,21 +11,23 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.os.IBinder;
+import android.os.PowerManager;
 
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 /**
- * The Android `--auto`: a foreground service that runs `--auto --once` when Wi-Fi connects,
- * when Android sees the Wi-Fi lose internet, and every 5 minutes in case it does not notice.
+ * The Android `--auto`: a foreground service that runs `--auto --once` every 30 seconds
+ * and right away when Wi-Fi connects. On Wi-MESH it keeps the CPU awake so the screen
+ * turning off does not pause the checks.
  */
 public class LoginService extends Service {
     private static final String CHANNEL = "auto";
-    private static final long INTERVAL_SECONDS = 5 * 60;
+    private static final long INTERVAL_SECONDS = 30;
 
     private final Semaphore wake = new Semaphore(0);
     private volatile boolean running;
-    private volatile boolean validated;
+    private PowerManager.WakeLock wakeLock;
     private ConnectivityManager.NetworkCallback callback;
 
     static void start(Context context) {
@@ -50,24 +52,14 @@ public class LoginService extends Service {
         }
         if (!running) {
             running = true;
+            wakeLock = getSystemService(PowerManager.class)
+                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "wimesh:auto");
+            wakeLock.setReferenceCounted(false);
             new Thread(this::loop).start();
             callback = new ConnectivityManager.NetworkCallback() {
                 @Override
                 public void onAvailable(Network network) {
-                    validated = false;
                     wake.release();
-                }
-
-                @Override
-                public void onCapabilitiesChanged(Network network,
-                        NetworkCapabilities capabilities) {
-                    boolean now = capabilities.hasCapability(
-                            NetworkCapabilities.NET_CAPABILITY_VALIDATED);
-                    // Only the drop counts; this also fires on every signal strength change
-                    if (validated && !now) {
-                        wake.release();
-                    }
-                    validated = now;
                 }
             };
             getSystemService(ConnectivityManager.class).registerNetworkCallback(
@@ -82,12 +74,19 @@ public class LoginService extends Service {
     private void loop() {
         while (running) {
             LoginJob.run(this);
+            // Off Wi-MESH the phone may sleep; connecting to Wi-Fi wakes the loop again
+            if (LoginJob.onWiMesh(this)) {
+                wakeLock.acquire();
+            } else {
+                wakeLock.release();
+            }
             try {
                 wake.tryAcquire(INTERVAL_SECONDS, TimeUnit.SECONDS);
             } catch (InterruptedException ignored) {
             }
             wake.drainPermits();
         }
+        wakeLock.release();
     }
 
     @Override

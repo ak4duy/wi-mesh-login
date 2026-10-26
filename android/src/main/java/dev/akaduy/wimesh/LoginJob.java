@@ -86,6 +86,10 @@ final class LoginJob {
         }
     }
 
+    static boolean onWiMesh(Context context) {
+        return wifiNetwork(context) != null && WI_MESH_SSIDS.contains(currentSsid(context));
+    }
+
     @SuppressWarnings("deprecation")
     private static Network wifiNetwork(Context context) {
         ConnectivityManager manager = context.getSystemService(ConnectivityManager.class);

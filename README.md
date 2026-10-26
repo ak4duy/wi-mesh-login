@@ -57,11 +57,11 @@ Options include:
 The [`android/`](android) app makes it fully automatic: save your shop account once, then it logs in
 whenever the phone joins `Wi-MESH 2.4G` or `Wi-MESH 5G`. No terminal, no Tasker.
 
-- **Always on:** a foreground service (like `--auto`) runs `--auto --once` when Wi-Fi connects, when
-  Android sees the Wi-Fi lose internet, and every 5 minutes as a fallback, so it logs in again when
-  the session expires. Other Wi-Fi networks never start the CLI. Checks go over Wi-Fi only, never
-  mobile data. It starts on boot and
-  shows a silent notification. On phones that kill background apps, set battery to "Unrestricted".
+- **Always on:** a foreground service (like `--auto`) runs `--auto --once` every 30 seconds and right
+  away when Wi-Fi connects, so it logs in again whenever the session ends. While on Wi-MESH it keeps
+  the CPU awake so checks continue with the screen off; elsewhere the phone sleeps normally. Other
+  Wi-Fi networks never start the CLI. Checks go over Wi-Fi only, never mobile data. It starts on
+  boot and shows a silent notification. On phones that kill background apps, set battery to "Unrestricted".
 - **Storage:** plain Java on framework APIs only (no AndroidX or Kotlin), shrunk with R8, arm64 only.
   The bundled CLI is most of the APK.
 - **Permissions:** allow location "all the time". Android only shows the Wi-Fi name to apps with
