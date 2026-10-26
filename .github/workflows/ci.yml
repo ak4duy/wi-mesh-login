@@ -13,3 +13,22 @@ jobs:
       - run: cargo fmt --check
       - run: cargo build --locked
       - run: cargo clippy --locked --all-targets -- -D warnings
+
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      # The runner image ships the Android SDK and sets ANDROID_NDK_HOME
+      - run: ./gradlew --no-daemon assembleRelease
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wi-mesh-login-android
+          path: android/build/outputs/apk/release/*.apk
