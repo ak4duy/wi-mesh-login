@@ -12,7 +12,7 @@ use clap::{Parser, Subcommand};
 mod reward;
 mod usage;
 use if_addrs::get_if_addrs;
-use reqwest::{blocking::Client, header, redirect::Policy};
+use reqwest::{StatusCode, blocking::Client, header, redirect::Policy};
 use scraper::{Html, Selector};
 use url::{Url, form_urlencoded};
 
@@ -426,11 +426,10 @@ fn interface_address(interface: &str) -> Result<IpAddr> {
 
 fn internet_ok(client: &Client) -> bool {
     client
-        .get("https://example.com")
+        .get(ENTRY_URL)
         .timeout(Duration::from_secs(8))
         .send()
-        .and_then(|response| response.error_for_status())
-        .is_ok()
+        .is_ok_and(|response| response.status() == StatusCode::NO_CONTENT)
 }
 
 fn build_login_payload(
