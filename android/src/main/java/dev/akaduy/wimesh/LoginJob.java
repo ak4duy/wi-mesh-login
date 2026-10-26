@@ -1,10 +1,5 @@
 package dev.akaduy.wimesh;
 
-import android.app.job.JobInfo;
-import android.app.job.JobParameters;
-import android.app.job.JobScheduler;
-import android.app.job.JobService;
-import android.content.ComponentName;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -22,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.KeyStore;
 import java.util.Date;
+import java.util.Set;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -29,32 +25,11 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
 /** Runs the bundled CLI once: `--auto --once` over the current Wi-Fi network. */
-public class LoginJob extends JobService {
-    private static final int JOB_ID = 1;
+final class LoginJob {
     private static final String KEY_ALIAS = "wimesh";
     private static final int LOG_LIMIT = 8 * 1024;
-
-    static void schedule(Context context) {
-        JobInfo job = new JobInfo.Builder(JOB_ID, new ComponentName(context, LoginJob.class))
-                .setMinimumLatency(1)
-                .setOverrideDeadline(30_000)
-                .build();
-        context.getSystemService(JobScheduler.class).schedule(job);
-    }
-
-    @Override
-    public boolean onStartJob(JobParameters params) {
-        new Thread(() -> {
-            run(this);
-            jobFinished(params, false);
-        }).start();
-        return true;
-    }
-
-    @Override
-    public boolean onStopJob(JobParameters params) {
-        return false;
-    }
+    // Same names as the CLI's default --ssid list, quoted like WifiInfo.getSSID()
+    private static final Set<String> WI_MESH_SSIDS = Set.of("\"Wi-MESH 2.4G\"", "\"Wi-MESH 5G\"");
 
     static File stateDir(Context context) {
         return new File(context.getNoBackupFilesDir(), "state");
@@ -77,8 +52,11 @@ public class LoginJob extends JobService {
         File plain = new File(stateDir(context), "credentials");
         try {
             Network wifi = wifiNetwork(context);
+            String ssid = currentSsid(context);
             if (wifi == null) {
                 output = "Not connected to Wi-Fi, skipped.";
+            } else if (!WI_MESH_SSIDS.contains(ssid)) {
+                output = "Wi-Fi " + ssid + " is not Wi-MESH, skipped.";
             } else {
                 stateDir(context).mkdirs();
                 // The CLI reads plaintext; it only exists while the CLI runs
@@ -86,7 +64,7 @@ public class LoginJob extends JobService {
                 ProcessBuilder builder = new ProcessBuilder(
                         context.getApplicationInfo().nativeLibraryDir + "/libwimesh.so",
                         "--auto", "--once", "--no-logs",
-                        "--current-ssid", currentSsid(context),
+                        "--current-ssid", ssid,
                         "--state-dir", stateDir(context).getPath(),
                         "--network-handle", Long.toString(wifi.getNetworkHandle()))
                         .redirectErrorStream(true);
@@ -114,7 +92,10 @@ public class LoginJob extends JobService {
         for (Network network : manager.getAllNetworks()) {
             NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
             if (capabilities != null
-                    && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                    // Never let mobile data or a VPN answer the internet check
+                    && !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                    && !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                 return network;
             }
         }

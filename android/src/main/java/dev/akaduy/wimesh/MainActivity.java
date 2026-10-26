@@ -53,9 +53,9 @@ public class MainActivity extends Activity {
             }
             try {
                 LoginJob.seal(this, number, secret);
-                NetworkReceiver.register(this);
+                LoginService.start(this);
                 password.setText("");
-                status.setText("Saved. Logs in automatically when Wi-MESH connects.");
+                status.setText("Saved. Keeps Wi-MESH logged in in the background.");
                 requestLocation();
             } catch (Exception error) {
                 status.setText("Could not save: " + error);
@@ -69,6 +69,7 @@ public class MainActivity extends Activity {
             }).start();
         });
         forget.setOnClickListener(view -> {
+            LoginService.stop(this);
             LoginJob.forget(this);
             status.setText("Account forgotten. Auto login is off.");
         });
@@ -96,8 +97,8 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (LoginJob.hasCredentials(this)) {
-            // Also re-arms the callback if the app was force-stopped
-            NetworkReceiver.register(this);
+            // Also restarts the service if the app was force-stopped
+            LoginService.start(this);
             showLog();
         } else {
             status.setText("Save your shop account to enable auto login.");
