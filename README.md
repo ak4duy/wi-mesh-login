@@ -54,18 +54,41 @@ Options include:
 
 ## Android
 
-Polling drains the battery, so on Android run `--once` from a `ConnectivityManager.NetworkCallback`
-or WorkManager job when Wi-Fi connects. Rust cannot read the SSID on Android, so the app passes it:
+The [`android/`](android) app makes it fully automatic: save your shop account once, then it logs in
+whenever the phone joins `Wi-MESH 2.4G` or `Wi-MESH 5G`. No terminal, no Tasker.
+
+- **Battery:** nothing runs between connections. Android wakes the app only when Wi-Fi connects,
+  and it runs `--auto --once` once.
+- **Storage:** plain Java on framework APIs only (no AndroidX or Kotlin), shrunk with R8, arm64 only.
+  The bundled CLI is most of the APK.
+- **Permissions:** allow location "all the time". Android only shows the Wi-Fi name to apps with
+  location access, and without it every run is skipped.
+- **Credentials** are encrypted with Android Keystore. They are decrypted into the app's private
+  `--state-dir` only while the CLI runs.
+
+Download the APK from the `wi-mesh-login-android` artifact of a CI run, or build it yourself with
+the Android SDK, NDK and `rustup target add aarch64-linux-android` installed:
 
 ```sh
-wi-mesh-login --auto --once --current-ssid "$SSID" --state-dir "$FILES_DIR/wi-mesh" --no-logs
+cd android && ./gradlew assembleRelease
+# android/build/outputs/apk/release/wi-mesh-login-android-release.apk
 ```
 
-- If `--current-ssid` is not in the `--ssid` allowlist (default `Wi-MESH 2.4G` and `Wi-MESH 5G`),
-  it exits 0 without any network request. Without `--current-ssid`, it does nothing on Android.
-- Android has no OS keyring backend, so shop credentials live in `credentials` (`PHONE\nPASSWORD`)
-  inside `--state-dir` (or `WI_MESH_LOGIN_STATE_DIR`). Point it at the app's private files dir and
-  let the app wrap it with Android Keystore. Linux and Windows still use the OS credential store.
+The release APK is signed with your local debug key. That is fine for sideloading, not for Play.
+
+### Using the CLI from another Android caller
+
+```sh
+wi-mesh-login --auto --once --current-ssid "$SSID" --state-dir "$DIR" --network-handle "$HANDLE"
+```
+
+- If `--current-ssid` is not in the `--ssid` allowlist, it exits 0 without any network request.
+  Without `--current-ssid`, it does nothing on Android.
+- `--network-handle` (Android only) takes `Network.getNetworkHandle()`. It sends every request over
+  that Wi-Fi even while mobile data is the default route.
+- Android has no OS keyring backend, so shop credentials are read from `credentials`
+  (`PHONE\nPASSWORD`) in `--state-dir` (or `WI_MESH_LOGIN_STATE_DIR`). Linux and Windows still use
+  the OS credential store.
 
 ## Shop commands
 

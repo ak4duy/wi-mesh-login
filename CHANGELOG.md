@@ -4,6 +4,8 @@
 
 - feat(auto): add `--once`, `--attempts`, `--ssid`, `--current-ssid` and `--state-dir` for event-driven auto login on Android
 - feat(reward): use a private file credential store on Android, keyring stays on Linux and Windows
+- feat(android): add an app that logs in automatically when Wi-MESH connects
+- feat(auto): add `--network-handle` on Android and confirm connectivity after `--once` logins
 
 ## [0.3.4] - 2026-10-25
 
