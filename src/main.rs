@@ -88,6 +88,11 @@ struct Args {
     #[arg(long, value_name = "DIR", requires = "auto")]
     state_dir: Option<PathBuf>,
 
+    /// Android Network.getNetworkHandle() to send all requests through
+    #[cfg(target_os = "android")]
+    #[arg(long, value_name = "HANDLE", requires = "auto")]
+    network_handle: Option<u64>,
+
     /// Post login without logs, debug artifacts, or connectivity checks
     #[arg(long, conflicts_with = "logout")]
     no_logs: bool,
@@ -162,6 +167,10 @@ fn main() -> Result<()> {
         if !ssid_allowed(&args) {
             return Ok(());
         }
+        #[cfg(target_os = "android")]
+        if let Some(handle) = args.network_handle {
+            bind_network(handle)?;
+        }
         let retry_after = Duration::from_secs(args.retry_after.unwrap_or(10));
         if args.once {
             return auto_once(&args, retry_after, args.attempts.unwrap_or(3));
@@ -225,7 +234,15 @@ fn auto_once(args: &Args, retry_after: Duration, attempts: u32) -> Result<()> {
             println!("Internet connectivity already works.");
             return Ok(());
         }
-        match auto_login(args) {
+        let result = auto_login(args).and_then(|()| {
+            thread::sleep(Duration::from_secs(2));
+            if internet_ok(&client) {
+                Ok(())
+            } else {
+                bail!("login was posted, but internet connectivity still failed")
+            }
+        });
+        match result {
             Ok(()) => return Ok(()),
             Err(error) if attempt < attempts => {
                 eprintln!(
@@ -238,6 +255,23 @@ fn auto_once(args: &Args, retry_after: Duration, attempts: u32) -> Result<()> {
         }
     }
     unreachable!("attempts is at least 1")
+}
+
+/// Route this process over one network, e.g. a captive Wi-Fi while mobile data is the default
+#[cfg(target_os = "android")]
+fn bind_network(handle: u64) -> Result<()> {
+    #[link(name = "android")]
+    unsafe extern "C" {
+        fn android_setprocnetwork(network: u64) -> i32;
+    }
+    // SAFETY: plain FFI call that takes the handle by value
+    if unsafe { android_setprocnetwork(handle) } != 0 {
+        bail!(
+            "binding to Android network {handle}: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+    Ok(())
 }
 
 fn auto_login(args: &Args) -> Result<()> {
