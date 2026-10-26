@@ -1,0 +1,66 @@
+import org.gradle.internal.os.OperatingSystem
+
+plugins {
+    id "com.android.application" version "8.13.0"
+}
+
+android {
+    namespace "dev.akaduy.wimesh"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "dev.akaduy.wimesh"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "0.3.4"
+        // Nearly every phone in use is arm64; a single ABI keeps the APK small
+        ndk { abiFilters "arm64-v8a" }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt")
+            // Personal sideloaded build: sign with the local debug key
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Executed as a process, so it must be extracted from the APK
+    packaging { jniLibs { useLegacyPackaging true } }
+
+    dependenciesInfo {
+        includeInApk false
+        includeInBundle false
+    }
+}
+
+// Cross-compiles the CLI with the NDK and ships it as lib/arm64-v8a/libwimesh.so
+tasks.register("cargoBuild", Exec) {
+    def ndk = System.getenv("ANDROID_NDK_HOME") ?: System.getenv("ANDROID_NDK_ROOT") ?: android.ndkDirectory.path
+    def os = OperatingSystem.current()
+    def host = os.isWindows() ? "windows-x86_64" : os.isMacOsX() ? "darwin-x86_64" : "linux-x86_64"
+    def bin = "$ndk/toolchains/llvm/prebuilt/$host/bin"
+    def clang = "$bin/aarch64-linux-android${android.defaultConfig.minSdk}-clang" + (os.isWindows() ? ".cmd" : "")
+    def root = rootDir.parentFile
+    workingDir root
+    environment "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER", clang
+    environment "CC_aarch64_linux_android", clang
+    environment "AR_aarch64_linux_android", "$bin/llvm-ar"
+    commandLine "cargo", "build", "--locked", "--release", "--target", "aarch64-linux-android"
+    doLast {
+        copy {
+            from "$root/target/aarch64-linux-android/release/wi-mesh-login"
+            into "src/main/jniLibs/arm64-v8a"
+            rename { "libwimesh.so" }
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn "cargoBuild" }
