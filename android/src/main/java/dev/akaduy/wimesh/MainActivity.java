@@ -6,6 +6,8 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.view.Window;
+import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -22,6 +24,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        // Android 15 draws apps edge-to-edge, so the old title bar would cover the form
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        TextView title = new TextView(this);
+        title.setText("Wi-MESH Login");
+        title.setTextSize(24);
         EditText phone = new EditText(this);
         phone.setHint("Shop phone number");
         phone.setInputType(InputType.TYPE_CLASS_PHONE);
@@ -69,7 +76,7 @@ public class MainActivity extends Activity {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         int padding = (int) (16 * getResources().getDisplayMetrics().density);
-        layout.setPadding(padding, padding, padding, padding);
+        layout.addView(title);
         layout.addView(phone);
         layout.addView(password);
         layout.addView(save);
@@ -78,6 +85,10 @@ public class MainActivity extends Activity {
         layout.addView(status);
         ScrollView root = new ScrollView(this);
         root.addView(layout);
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            applyInsets(layout, padding, insets);
+            return insets;
+        });
         setContentView(root);
     }
 
@@ -91,6 +102,15 @@ public class MainActivity extends Activity {
         } else {
             status.setText("Save your shop account to enable auto login.");
         }
+    }
+
+    /** Keeps the form clear of the status bar, navigation bar and keyboard. */
+    @SuppressWarnings("deprecation")
+    private static void applyInsets(LinearLayout layout, int padding, WindowInsets insets) {
+        layout.setPadding(padding + insets.getSystemWindowInsetLeft(),
+                padding + insets.getSystemWindowInsetTop(),
+                padding + insets.getSystemWindowInsetRight(),
+                padding + insets.getSystemWindowInsetBottom());
     }
 
     /** Reading the Wi-Fi name needs location; background runs need "Allow all the time". */
