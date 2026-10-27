@@ -143,8 +143,15 @@ fn main() -> Result<()> {
                 thread::sleep(interval);
                 continue;
             }
+            println!("No internet, trying to login...");
             match auto_login(&args) {
-                Ok(()) => thread::sleep(interval),
+                Ok(()) => {
+                    println!(
+                        "Auto login succeeded. Next check in {}s.",
+                        interval.as_secs()
+                    );
+                    thread::sleep(interval);
+                }
                 Err(error) => {
                     eprintln!("Auto login failed: {error:#}. Retrying in {retry_after}s...");
                     thread::sleep(Duration::from_secs(retry_after));
