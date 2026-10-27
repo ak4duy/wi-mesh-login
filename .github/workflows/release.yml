@@ -12,13 +12,14 @@ jobs:
     concurrency:
       group: release
     outputs:
-      tag: ${{ fromJSON(steps.release-plz.outputs.releases)[0].tag }}
+      tag: ${{ fromJSON(steps.release-plz.outputs.releases || '[]')[0].tag }}
       created: ${{ steps.release-plz.outputs.releases_created }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       - id: release-plz
         uses: release-plz/action@v0.5.144
         with:

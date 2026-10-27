@@ -1,3 +1,20 @@
+## [0.3.5] - 2026-10-27
+
+### Features
+
+- feat: add status logging for login attempts and success 8573d96 
+
+### Bug Fixes
+
+- fix: treat 204 No Content response as already online 0f004ec 
+
+### Miscellaneous
+
+- chore: release v0.3.4 cbbb4e1 
+- ci: add binary building and checksum generation to release workflow b651b48 
+
+
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.3.4...v0.3.5
 ## [0.3.4] - 2026-10-25
 
 ### Features
