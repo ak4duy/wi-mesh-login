@@ -198,6 +198,9 @@ fn login(args: &Args, username: &str, password: &str) -> Result<()> {
             .get(args.entry_url.clone())
             .send()
             .context("loading captive portal page")?;
+        if response.status() == reqwest::StatusCode::NO_CONTENT {
+            return Ok(());
+        }
         let page_url = response.url().clone();
         let page = response.text().context("reading captive portal page")?;
         let (action, payload) = build_login_payload(&page, &page_url, username, password)?;
@@ -229,6 +232,10 @@ fn login(args: &Args, username: &str, password: &str) -> Result<()> {
         Ok(response) => response,
         Err(error) => bail!("could not load captive portal page: {error}"),
     };
+    if response.status() == reqwest::StatusCode::NO_CONTENT {
+        artifacts.write_log("Entry URL returned 204, already online.");
+        return Ok(());
+    }
     let page_url = response.url().clone();
     let headers = format_headers(response.headers());
     let page = response.text().context("reading captive portal page")?;
