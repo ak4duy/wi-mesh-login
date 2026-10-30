@@ -305,11 +305,24 @@ pub(crate) fn fetch_active_card(state_dir: Option<&std::path::Path>) -> Result<(
         &session.token,
         &[("page", "1")],
     )?;
-    let card = data(&reply)?
+    let in_use: Vec<_> = data(&reply)?
         .as_array()
         .context("mycards response missing card list")?
         .iter()
-        .find(|card| card["Status"] == "Thẻ Đang Sử Dụng")
+        .filter(|card| card["Status"] == "Thẻ Đang Sử Dụng")
+        .collect();
+    let is_monthly = |card: &&Value| {
+        card.as_object().is_some_and(|fields| {
+            fields
+                .values()
+                .any(|v| v.as_str().is_some_and(|s| s.contains("Thẻ Tháng 150GB")))
+        })
+    };
+    let card = in_use
+        .iter()
+        .copied()
+        .find(is_monthly)
+        .or_else(|| in_use.first().copied())
         .context("no card in use found in shop account")?;
     let pin = card["Pin"]
         .as_str()
