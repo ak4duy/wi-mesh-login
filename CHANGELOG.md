@@ -1,3 +1,19 @@
+## [0.3.6] - 2026-10-30
+
+### Features
+
+- feat(login): fall back to next card when one is exhausted d18236a 
+
+### Bug Fixes
+
+- fix(reward): prefer monthly card when picking active card 98b21bd 
+
+### Miscellaneous
+
+- ci(release): add windows x86_64 target to release build matrix 416fc3f 
+
+
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.3.5...v0.3.6
 ## [0.3.5] - 2026-10-27
 
 ### Features
