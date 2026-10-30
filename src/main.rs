@@ -233,8 +233,8 @@ fn login(args: &Args, username: &str, password: &str) -> Result<()> {
             .context("login request returned an HTTP error")?
             .text()
             .context("reading login response")?;
-        if login_body.contains("Total traffic limit reached!") {
-            bail!("Card has reached the limits, please use another one.");
+        if let Some(error) = portal_error(&login_body) {
+            bail!("portal refused login: {error}");
         }
         return Ok(());
     }
@@ -285,9 +285,9 @@ fn login(args: &Args, username: &str, password: &str) -> Result<()> {
     if internet_ok(&client) {
         artifacts.write_log("Internet connectivity works.");
         Ok(())
-    } else if login_body.contains("Total traffic limit reached!") {
+    } else if let Some(error) = portal_error(&login_body) {
         bail!(
-            "Card has reached the limits, please use another one. Debug artifacts: {}",
+            "portal refused login: {error}. Debug artifacts: {}",
             artifacts.directory.display()
         )
     } else {
@@ -351,6 +351,22 @@ fn internet_ok(client: &Client) -> bool {
         .send()
         .and_then(|response| response.error_for_status())
         .is_ok()
+}
+
+fn portal_error(page: &str) -> Option<&str> {
+    let start = page.find(r#""error":""#)? + r#""error":""#.len();
+    let error = &page[start..start + page[start..].find('"')?];
+    (!error.is_empty()).then_some(error)
+}
+
+#[test]
+fn portal_error_reads_device_info() {
+    assert_eq!(
+        portal_error(r#"{"username":"X", "error":"Total traffic limit reached!", "error-code":""}"#),
+        Some("Total traffic limit reached!")
+    );
+    assert_eq!(portal_error(r#"{"error":"", "error-code":""}"#), None);
+    assert_eq!(portal_error("<html></html>"), None);
 }
 
 fn portal_online(client: &Client, entry_url: &Url) -> bool {
