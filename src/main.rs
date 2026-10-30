@@ -3,7 +3,7 @@ use std::{
     net::IpAddr,
     path::PathBuf,
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, bail};
@@ -133,7 +133,7 @@ fn main() -> Result<()> {
         let interval = Duration::from_secs(args.interval.unwrap_or(60));
         let retry_after = args.retry_after.unwrap_or(10);
         let client = build_client(&args)?;
-        let _ = reward::fetch_active_card(None);
+        let _ = reward::fetch_active_cards(None);
         println!(
             "Auto login running, checking every {}s. Press Ctrl+C to stop.",
             interval.as_secs()
@@ -166,18 +166,35 @@ fn main() -> Result<()> {
 }
 
 fn auto_login(args: &Args) -> Result<()> {
-    let (card, cached) = match reward::fetch_active_card(None) {
-        Ok(card) => (card, false),
+    let (cards, cached) = match reward::fetch_active_cards(None) {
+        Ok(cards) => (cards, false),
         Err(error) => {
-            eprintln!("Shop unreachable ({error:#}), using cached card.");
-            (reward::cached_card()?, true)
+            eprintln!("Shop unreachable ({error:#}), using cached cards.");
+            (reward::cached_cards()?, true)
         }
     };
-    login(args, &card.0, &card.1)?;
-    if cached {
-        let _ = reward::fetch_active_card(None);
+    let mut last_error = None;
+    for (pin, pass) in &cards {
+        let result = login(args, pin, pass).and_then(|()| {
+            if args.no_logs && !portal_online(&build_client(args)?, &args.entry_url) {
+                bail!("login was posted, but internet connectivity still failed");
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => {
+                if cached {
+                    let _ = reward::fetch_active_cards(None);
+                }
+                return Ok(());
+            }
+            Err(error) => {
+                eprintln!("Card {pin} failed: {error:#}");
+                last_error = Some(error);
+            }
+        }
     }
-    Ok(())
+    Err(last_error.expect("cards is never empty")).context("every card in use failed")
 }
 
 fn start_artifacts(args: &Args) -> Result<Artifacts> {
@@ -204,7 +221,7 @@ fn login(args: &Args, username: &str, password: &str) -> Result<()> {
         let page_url = response.url().clone();
         let page = response.text().context("reading captive portal page")?;
         let (action, payload) = build_login_payload(&page, &page_url, username, password)?;
-        client
+        let login_body = client
             .post(action)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .header(header::ORIGIN, "https://login.net.vn")
@@ -213,7 +230,12 @@ fn login(args: &Args, username: &str, password: &str) -> Result<()> {
             .send()
             .context("posting login form")?
             .error_for_status()
-            .context("login request returned an HTTP error")?;
+            .context("login request returned an HTTP error")?
+            .text()
+            .context("reading login response")?;
+        if login_body.contains("Total traffic limit reached!") {
+            bail!("Card has reached the limits, please use another one.");
+        }
         return Ok(());
     }
 
@@ -329,6 +351,21 @@ fn internet_ok(client: &Client) -> bool {
         .send()
         .and_then(|response| response.error_for_status())
         .is_ok()
+}
+
+fn portal_online(client: &Client, entry_url: &Url) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let online = client
+            .get(entry_url.clone())
+            .timeout(Duration::from_secs(1))
+            .send()
+            .is_ok_and(|response| response.status() == reqwest::StatusCode::NO_CONTENT);
+        if online || Instant::now() >= deadline {
+            return online;
+        }
+        thread::sleep(Duration::from_millis(200));
+    }
 }
 
 fn build_login_payload(

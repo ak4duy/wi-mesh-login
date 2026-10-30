@@ -286,17 +286,22 @@ pub(crate) fn authenticate_saved(
     authenticate(&phone, &password, state_dir)
 }
 
-pub(crate) fn cached_card() -> Result<(String, String)> {
+pub(crate) fn cached_cards() -> Result<Vec<(String, String)>> {
     let stored = fs::read_to_string(card_file()?)
         .context("no cached card, run `wi-mesh-login --auto` once while online")?;
-    let (pin, pass) = stored
-        .split_once('\n')
-        .filter(|(pin, pass)| !pin.is_empty() && !pass.is_empty())
-        .context("cached card has an invalid format")?;
-    Ok((pin.to_owned(), pass.to_owned()))
+    let lines: Vec<&str> = stored.lines().collect();
+    if lines.is_empty() || !lines.len().is_multiple_of(2) || lines.iter().any(|line| line.is_empty()) {
+        bail!("cached card has an invalid format");
+    }
+    Ok(lines
+        .chunks(2)
+        .map(|pair| (pair[0].to_owned(), pair[1].to_owned()))
+        .collect())
 }
 
-pub(crate) fn fetch_active_card(state_dir: Option<&std::path::Path>) -> Result<(String, String)> {
+pub(crate) fn fetch_active_cards(
+    state_dir: Option<&std::path::Path>,
+) -> Result<Vec<(String, String)>> {
     let session = authenticate_saved(state_dir)?;
     let reply = post(
         &session.client,
@@ -305,7 +310,7 @@ pub(crate) fn fetch_active_card(state_dir: Option<&std::path::Path>) -> Result<(
         &session.token,
         &[("page", "1")],
     )?;
-    let in_use: Vec<_> = data(&reply)?
+    let mut in_use: Vec<_> = data(&reply)?
         .as_array()
         .context("mycards response missing card list")?
         .iter()
@@ -318,22 +323,30 @@ pub(crate) fn fetch_active_card(state_dir: Option<&std::path::Path>) -> Result<(
                 .any(|v| v.as_str().is_some_and(|s| s.contains("Thẻ Tháng 150GB")))
         })
     };
-    let card = in_use
+    in_use.sort_by_key(|card| !is_monthly(card));
+    let cards = in_use
+        .into_iter()
+        .map(|card| {
+            let pin = card["Pin"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .context("card missing Pin")?;
+            let pass = card["Pass"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .context("card missing Pass")?;
+            Ok((pin.to_owned(), pass.to_owned()))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if cards.is_empty() {
+        bail!("no card in use found in shop account");
+    }
+    let stored: Vec<String> = cards
         .iter()
-        .copied()
-        .find(is_monthly)
-        .or_else(|| in_use.first().copied())
-        .context("no card in use found in shop account")?;
-    let pin = card["Pin"]
-        .as_str()
-        .filter(|s| !s.is_empty())
-        .context("card missing Pin")?;
-    let pass = card["Pass"]
-        .as_str()
-        .filter(|s| !s.is_empty())
-        .context("card missing Pass")?;
-    write_private(&card_file()?, &format!("{pin}\n{pass}"))?;
-    Ok((pin.to_owned(), pass.to_owned()))
+        .map(|(pin, pass)| format!("{pin}\n{pass}"))
+        .collect();
+    write_private(&card_file()?, &stored.join("\n"))?;
+    Ok(cards)
 }
 
 pub fn run(args: ShopArgs) -> Result<()> {
