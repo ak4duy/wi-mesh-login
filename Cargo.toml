@@ -19,6 +19,8 @@ url = "2.5"
 rpassword = "7.4"
 keyring = { version = "3.6", features = ["sync-secret-service", "windows-native"] }
 time = { version = "0.3", features = ["formatting"] }
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "0.8"
 
 [profile.release]
 opt-level = "z"
