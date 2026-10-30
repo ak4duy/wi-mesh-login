@@ -1,3 +1,23 @@
+## [0.3.7] - 2026-10-30
+
+### Features
+
+- feat(monitor): alert on discord when card data runs low 3f0f520 
+
+### Bug Fixes
+
+- fix(login): report any portal error instead of one hardcoded message 9a96300 
+
+### Other
+
+- build(deps): add serde and toml for monitor config 8c01c40 
+
+### Documentation
+
+- docs(readme): document discord data alert setup 6c6543e 
+
+
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.3.6...v0.3.7
 ## [0.3.6] - 2026-10-30
 
 ### Features

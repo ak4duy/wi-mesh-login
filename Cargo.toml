@@ -1,6 +1,6 @@
 [package]
 name = "wi-mesh-login"
-version = "0.3.6"
+version = "0.3.7"
 edition = "2024"
 description = "A quick CLI for logging into Wi-MESH (VN) and claim rewards"
 license = "MIT"
