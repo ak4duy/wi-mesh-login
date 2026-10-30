@@ -56,7 +56,7 @@ pub fn run(args: UsageArgs) -> Result<()> {
     Ok(())
 }
 
-fn card_check(session: &AuthenticatedSession, pin: &str) -> Result<Value> {
+pub(crate) fn card_check(session: &AuthenticatedSession, pin: &str) -> Result<Value> {
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .context("system clock is before the Unix epoch")?

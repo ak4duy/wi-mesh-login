@@ -1,0 +1,7 @@
+[Unit]
+Description=Alert on Discord when a Wi-MESH card runs low
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/wi-mesh-login monitor

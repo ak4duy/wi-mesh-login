@@ -9,6 +9,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 
+mod monitor;
 mod reward;
 mod usage;
 use if_addrs::get_if_addrs;
@@ -77,6 +78,8 @@ enum Command {
     Shop(reward::ShopArgs),
     /// Query MyWIFI card usage
     Usage(usage::UsageArgs),
+    /// Send a Discord alert when a card is running out of data
+    Monitor(monitor::MonitorArgs),
 }
 
 struct Artifacts {
@@ -121,6 +124,7 @@ fn main() -> Result<()> {
     match args.command {
         Some(Command::Shop(shop_args)) => return reward::run(shop_args),
         Some(Command::Usage(usage_args)) => return usage::run(usage_args),
+        Some(Command::Monitor(monitor_args)) => return monitor::run(monitor_args),
         None => {}
     }
 

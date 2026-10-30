@@ -121,7 +121,7 @@ fn device_id(directory: &std::path::Path, phone: &str) -> Result<String> {
     Ok(value)
 }
 
-fn default_state_dir() -> Result<PathBuf> {
+pub(crate) fn default_state_dir() -> Result<PathBuf> {
     #[cfg(windows)]
     let root = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
@@ -169,7 +169,7 @@ fn card_file() -> Result<PathBuf> {
     Ok(default_state_dir()?.join("card"))
 }
 
-fn write_private(path: &std::path::Path, contents: &str) -> Result<()> {
+pub(crate) fn write_private(path: &std::path::Path, contents: &str) -> Result<()> {
     fs::create_dir_all(path.parent().context("file has no parent directory")?)?;
     let mut options = fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
