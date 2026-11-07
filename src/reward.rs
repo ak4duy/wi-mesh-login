@@ -317,7 +317,12 @@ pub(crate) fn fetch_active_cards(
         .as_array()
         .context("mycards response missing card list")?
         .iter()
-        .filter(|card| card["Status"] == "Thẻ Đang Sử Dụng")
+        .filter(|card| {
+            matches!(
+                card["Status"].as_str(),
+                Some("Thẻ Đang Sử Dụng" | "Thẻ Chưa Sử Dụng")
+            )
+        })
         .collect();
     let is_monthly = |card: &&Value| {
         card.as_object().is_some_and(|fields| {
@@ -326,7 +331,7 @@ pub(crate) fn fetch_active_cards(
                 .any(|v| v.as_str().is_some_and(|s| s.contains("Thẻ Tháng 150GB")))
         })
     };
-    in_use.sort_by_key(|card| !is_monthly(card));
+    in_use.sort_by_key(|card| (card["Status"] == "Thẻ Chưa Sử Dụng", !is_monthly(card)));
     let cards = in_use
         .into_iter()
         .map(|card| {
@@ -342,7 +347,7 @@ pub(crate) fn fetch_active_cards(
         })
         .collect::<Result<Vec<_>>>()?;
     if cards.is_empty() {
-        bail!("no card in use found in shop account");
+        bail!("no usable card found in shop account");
     }
     let stored: Vec<String> = cards
         .iter()

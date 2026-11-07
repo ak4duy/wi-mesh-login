@@ -198,7 +198,7 @@ fn auto_login(args: &Args) -> Result<()> {
             }
         }
     }
-    Err(last_error.expect("cards is never empty")).context("every card in use failed")
+    Err(last_error.expect("cards is never empty")).context("every card failed")
 }
 
 fn start_artifacts(args: &Args) -> Result<Artifacts> {
