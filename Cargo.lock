@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "wi-mesh-login"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "anyhow",
  "clap",

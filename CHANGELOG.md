@@ -1,3 +1,15 @@
+## [0.3.8] - 2026-11-07
+
+### Features
+
+- feat(reward): fall back to unused cards in auto login 5c0e580 
+
+### Styling
+
+- style: wrap long lines to rustfmt width 672e08a 
+
+
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.3.6...v0.3.8
 ## [0.3.7] - 2026-10-30
 
 ### Features
