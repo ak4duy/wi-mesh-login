@@ -290,7 +290,10 @@ pub(crate) fn cached_cards() -> Result<Vec<(String, String)>> {
     let stored = fs::read_to_string(card_file()?)
         .context("no cached card, run `wi-mesh-login --auto` once while online")?;
     let lines: Vec<&str> = stored.lines().collect();
-    if lines.is_empty() || !lines.len().is_multiple_of(2) || lines.iter().any(|line| line.is_empty()) {
+    if lines.is_empty()
+        || !lines.len().is_multiple_of(2)
+        || lines.iter().any(|line| line.is_empty())
+    {
         bail!("cached card has an invalid format");
     }
     Ok(lines

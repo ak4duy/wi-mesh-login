@@ -366,7 +366,9 @@ fn portal_error(page: &str) -> Option<&str> {
 #[test]
 fn portal_error_reads_device_info() {
     assert_eq!(
-        portal_error(r#"{"username":"X", "error":"Total traffic limit reached!", "error-code":""}"#),
+        portal_error(
+            r#"{"username":"X", "error":"Total traffic limit reached!", "error-code":""}"#
+        ),
         Some("Total traffic limit reached!")
     );
     assert_eq!(portal_error(r#"{"error":"", "error-code":""}"#), None);

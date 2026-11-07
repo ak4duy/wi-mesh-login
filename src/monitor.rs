@@ -191,7 +191,9 @@ fn next_alert(remaining: f64, thresholds: &[f64], last_alert: Option<f64>) -> Op
     thresholds
         .iter()
         .copied()
-        .filter(|&threshold| remaining <= threshold && last_alert.is_none_or(|last| threshold < last))
+        .filter(|&threshold| {
+            remaining <= threshold && last_alert.is_none_or(|last| threshold < last)
+        })
         .reduce(f64::min)
 }
 
