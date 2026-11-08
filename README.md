@@ -60,7 +60,7 @@ Failures back off exponentially from `--retry-after` up to `--max-retry-after`, 
 
 Cards come from the saved shop account. `--auto` keeps using the card that last worked and moves to the next in-use card when it is exhausted or rejected, wrapping around the list.
 
-`--night-pause 23:00-06:00` calls the shop `card-pause` (1 week) on the card in use when the window starts and `card-resume` when it ends. No login is attempted inside the window. The window uses the local time zone read at startup and may wrap midnight. The pending resume is kept in `night-paused` under the state directory, so a restart still resumes the card. If the shop refuses to pause (for example the card does not support pausing), `--auto` stays online and retries every 10 minutes.
+`--night-pause 23:00-06:00` calls the shop `card-pause` (1 week) on the card of the live portal session when the window starts and `card-resume` when it ends. No login is attempted inside the window. The window uses the local time zone read at startup and may wrap midnight. The paused card is kept in `night-paused` under the state directory, so a restart still resumes it. If the shop refuses to pause (for example the card does not support pausing) or no session is live, `--auto` stays online and retries every 10 minutes. If the resume fails (for example the shop is unreachable while offline), `--auto` logs in with another card, skipping the paused one, and retries the resume every minute.
 
 ## Shop commands
 

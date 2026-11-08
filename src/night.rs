@@ -12,6 +12,7 @@ use crate::reward;
 
 const SECONDS_PER_DAY: u32 = 86_400;
 const PAUSE_RETRY: Duration = Duration::from_secs(600);
+const RESUME_RETRY: Duration = Duration::from_secs(60);
 const PAUSE_WEEKS: &str = "1";
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -66,6 +67,7 @@ pub struct Night {
     window: NightWindow,
     offset: UtcOffset,
     retry_pause_at: Option<Instant>,
+    retry_resume_at: Option<Instant>,
 }
 
 impl Night {
@@ -76,6 +78,7 @@ impl Night {
             window,
             offset,
             retry_pause_at: None,
+            retry_resume_at: None,
         })
     }
 
@@ -84,36 +87,48 @@ impl Night {
         u32::from(now.hour()) * 3600 + u32::from(now.minute()) * 60 + u32::from(now.second())
     }
 
-    pub fn tick(&mut self, current_pin: Option<&str>) -> Tick {
-        match self.step(current_pin) {
-            Ok(tick) => tick,
+    pub fn tick(&mut self, live_pin: impl FnOnce() -> Option<String>) -> Tick {
+        match paused_pins() {
+            Ok(held) => self.step(self.second_of_day(), held, resume, || pause(live_pin())),
             Err(error) => Tick::Failed(error),
         }
     }
 
-    fn step(&mut self, current_pin: Option<&str>) -> Result<Tick> {
-        let second = self.second_of_day();
-        let held = load_paused()?;
+    fn step(
+        &mut self,
+        second: u32,
+        held: Vec<String>,
+        resume: impl FnOnce(&[String]) -> Result<()>,
+        pause: impl FnOnce() -> Result<String>,
+    ) -> Tick {
         if !self.window.contains(second) {
             self.retry_pause_at = None;
-            if !held.is_empty() {
-                resume(&held)?;
+            if held.is_empty() || Self::pending(self.retry_resume_at) {
+                return Tick::Proceed;
             }
-            return Ok(Tick::Proceed);
+            self.retry_resume_at = match resume(&held) {
+                Ok(()) => None,
+                Err(error) => {
+                    eprintln!(
+                        "Night resume failed: {error:#}. Logging in with another card, retrying in {}s.",
+                        RESUME_RETRY.as_secs()
+                    );
+                    Some(Instant::now() + RESUME_RETRY)
+                }
+            };
+            return Tick::Proceed;
         }
+        self.retry_resume_at = None;
         if !held.is_empty() {
-            return Ok(Tick::Paused(self.until_end(second)));
+            return Tick::Paused(self.until_end(second));
         }
-        if self
-            .retry_pause_at
-            .is_some_and(|retry_at| Instant::now() < retry_at)
-        {
-            return Ok(Tick::Proceed);
+        if Self::pending(self.retry_pause_at) {
+            return Tick::Proceed;
         }
-        match pause(current_pin) {
+        match pause() {
             Ok(pin) => {
                 println!("Night window started, card {pin} paused.");
-                Ok(Tick::Paused(self.until_end(second)))
+                Tick::Paused(self.until_end(second))
             }
             Err(error) => {
                 eprintln!(
@@ -121,9 +136,13 @@ impl Night {
                     PAUSE_RETRY.as_secs()
                 );
                 self.retry_pause_at = Some(Instant::now() + PAUSE_RETRY);
-                Ok(Tick::Proceed)
+                Tick::Proceed
             }
         }
+    }
+
+    fn pending(retry_at: Option<Instant>) -> bool {
+        retry_at.is_some_and(|retry_at| Instant::now() < retry_at)
     }
 
     fn until_end(&self, second: u32) -> Duration {
@@ -135,7 +154,7 @@ fn paused_file() -> Result<PathBuf> {
     Ok(reward::default_state_dir()?.join("night-paused"))
 }
 
-fn load_paused() -> Result<Vec<String>> {
+pub fn paused_pins() -> Result<Vec<String>> {
     match fs::read_to_string(paused_file()?) {
         Ok(text) => Ok(text.lines().map(str::to_owned).collect()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
@@ -168,15 +187,8 @@ fn card_request(endpoint: &str, fields: &[(&str, &str)]) -> Result<()> {
     reward::data(&reply).map(|_| ())
 }
 
-fn pause(current_pin: Option<&str>) -> Result<String> {
-    let pin = match current_pin {
-        Some(pin) => pin.to_owned(),
-        None => reward::fetch_active_cards(None)?
-            .into_iter()
-            .next()
-            .map(|(pin, _)| pin)
-            .ok_or_else(|| anyhow!("no card to pause"))?,
-    };
+fn pause(live_pin: Option<String>) -> Result<String> {
+    let pin = live_pin.ok_or_else(|| anyhow!("no active card session to pause"))?;
     card_request("card-pause", &[("key", &pin), ("week", PAUSE_WEEKS)])
         .with_context(|| format!("pausing card {pin}"))?;
     save_paused(std::slice::from_ref(&pin))?;
@@ -248,5 +260,63 @@ mod tests {
         ] {
             assert!(text.parse::<NightWindow>().is_err(), "{text}");
         }
+    }
+
+    fn night(text: &str) -> Night {
+        Night {
+            window: window(text),
+            offset: UtcOffset::UTC,
+            retry_pause_at: None,
+            retry_resume_at: None,
+        }
+    }
+
+    fn held() -> Vec<String> {
+        vec!["PIN".to_owned()]
+    }
+
+    #[test]
+    fn failed_resume_proceeds_and_retries_later() {
+        let mut night = night("23:00-06:00");
+        let noon = 12 * 3600;
+        let tick = night.step(noon, held(), |_| Err(anyhow!("offline")), || unreachable!());
+        assert!(matches!(tick, Tick::Proceed));
+        let tick = night.step(
+            noon,
+            held(),
+            |_| panic!("resume retried before its delay"),
+            || unreachable!(),
+        );
+        assert!(matches!(tick, Tick::Proceed));
+        night.retry_resume_at = Some(Instant::now());
+        let tick = night.step(noon, held(), |_| Ok(()), || unreachable!());
+        assert!(matches!(tick, Tick::Proceed));
+        assert!(night.retry_resume_at.is_none());
+    }
+
+    #[test]
+    fn failed_pause_proceeds_and_retries_later() {
+        let mut night = night("23:00-06:00");
+        let tick = night.step(
+            0,
+            Vec::new(),
+            |_| unreachable!(),
+            || Err(anyhow!("not eligible")),
+        );
+        assert!(matches!(tick, Tick::Proceed));
+        let tick = night.step(
+            0,
+            Vec::new(),
+            |_| unreachable!(),
+            || panic!("pause retried before its delay"),
+        );
+        assert!(matches!(tick, Tick::Proceed));
+    }
+
+    #[test]
+    fn held_cards_keep_the_window_paused() {
+        let mut night = night("23:00-06:00");
+        let tick = night.step(5 * 3600, held(), |_| unreachable!(), || unreachable!());
+        assert!(matches!(tick, Tick::Paused(left) if left == Duration::from_secs(3600)));
     }
 }

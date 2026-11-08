@@ -6,7 +6,7 @@ use scraper::{Html, Selector};
 
 use crate::{
     Args, build_client, internet_ok, login,
-    night::{Night, Tick},
+    night::{self, Night, Tick},
     portal_online, reward,
 };
 
@@ -81,7 +81,7 @@ pub fn run(args: &Args) -> Result<()> {
     );
     loop {
         if let Some(night) = night.as_mut() {
-            match night.tick(rotation.current.as_deref()) {
+            match night.tick(|| live_card(&client)) {
                 Tick::Proceed => {}
                 Tick::Paused(remaining) => {
                     thread::sleep(remaining.min(interval));
@@ -164,6 +164,13 @@ fn status_user(page: &str) -> Option<String> {
     (!user.is_empty()).then(|| user.to_owned())
 }
 
+fn live_card(client: &Client) -> Option<String> {
+    match probe_portal(client) {
+        Portal::LoggedIn(user) => Some(user),
+        Portal::Unreachable(_) | Portal::LoggedOut => None,
+    }
+}
+
 fn login_with_rotation(args: &Args, rotation: &mut Rotation) -> Result<()> {
     let (cards, cached) = match reward::fetch_active_cards(None) {
         Ok(cards) => (cards, false),
@@ -172,6 +179,14 @@ fn login_with_rotation(args: &Args, rotation: &mut Rotation) -> Result<()> {
             (reward::cached_cards()?, true)
         }
     };
+    let paused = night::paused_pins()?;
+    let cards: Vec<_> = cards
+        .into_iter()
+        .filter(|(pin, _)| !paused.contains(pin))
+        .collect();
+    if cards.is_empty() {
+        bail!("every card is paused for the night");
+    }
     let mut last_error = None;
     for (pin, pass) in &rotation.order(cards) {
         let result = login(args, pin, pass).and_then(|()| {
