@@ -1,7 +1,4 @@
-use std::{
-    io::{self, BufRead, Write},
-    path::PathBuf,
-};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
@@ -20,22 +17,6 @@ pub struct DevicesArgs {
     pins: Vec<String>,
 
     #[arg(long, help = "Print JSON instead of a table")]
-    json: bool,
-
-    #[arg(long, help = "Directory for per-account device IDs")]
-    state_dir: Option<PathBuf>,
-}
-
-#[derive(Debug, Args)]
-#[command(about = "Log every device off a card")]
-pub struct KickArgs {
-    #[arg(value_name = "PIN", help = "Card PIN")]
-    pin: String,
-
-    #[arg(long, short, help = "Skip the confirmation prompt")]
-    yes: bool,
-
-    #[arg(long, help = "Print JSON instead of text")]
     json: bool,
 
     #[arg(long, help = "Directory for per-account device IDs")]
@@ -108,52 +89,6 @@ pub fn run_devices(args: DevicesArgs) -> Result<()> {
     }
     Ok(())
 }
-
-pub fn run_kick(args: KickArgs) -> Result<()> {
-    if args.pin.is_empty() {
-        bail!("PIN is empty");
-    }
-    if !args.yes && !confirm(&args.pin)? {
-        bail!("aborted, no device was logged off");
-    }
-
-    let mut session = reward::authenticate_saved(args.state_dir.as_deref())?;
-    let reply = reward::call(&mut session, "card-logout", &[("key", &args.pin)])?;
-    let message = kick_message(&reply)?;
-    if args.json {
-        let output = json!({"pin": args.pin, "result": true, "msg": message});
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        println!("Card {}: {message}", args.pin);
-    }
-    Ok(())
-}
-
-fn kick_message(reply: &Value) -> Result<String> {
-    if reply["result"] != true {
-        bail!(
-            "shop rejected request (code {}): {}",
-            reply["code"],
-            reply["msg"].as_str().unwrap_or("unknown error")
-        );
-    }
-    Ok(reply["msg"].as_str().unwrap_or("Success").to_owned())
-}
-
-fn confirm(pin: &str) -> Result<bool> {
-    eprint!("Log every device off card {pin}? [y/N] ");
-    io::stderr().flush()?;
-    let mut answer = String::new();
-    io::stdin()
-        .lock()
-        .read_line(&mut answer)
-        .context("reading confirmation")?;
-    Ok(matches!(
-        answer.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
-    ))
-}
-
 fn in_use_pins(cards: &Value) -> Result<Vec<String>> {
     cards
         .as_array()
@@ -412,18 +347,5 @@ mod tests {
         assert_eq!(parse_size("2.00 KB"), 2048);
         assert_eq!(parse_size("12"), 0);
         assert_eq!(parse_size("1.0 PB"), 0);
-    }
-
-    #[test]
-    fn kick_reply_success_and_rejection() {
-        assert_eq!(
-            kick_message(&json!({"result": true, "msg": "Done"})).unwrap(),
-            "Done"
-        );
-        assert_eq!(kick_message(&json!({"result": true})).unwrap(), "Success");
-        let error = kick_message(&json!({"result": false, "code": 2, "msg": "denied"}))
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("code 2") && error.contains("denied"));
     }
 }

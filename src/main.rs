@@ -13,7 +13,6 @@ mod auto;
 mod auto_reward;
 mod devices;
 mod monitor;
-mod night;
 mod refresh;
 mod reward;
 mod status;
@@ -73,10 +72,6 @@ struct Args {
     #[arg(long, value_name = "SECONDS", conflicts_with_all = ["username", "logout"])]
     max_retry_after: Option<u64>,
 
-    /// Pause the card through the shop during this local time window, e.g. 23:00-06:00
-    #[arg(long, value_name = "HH:MM-HH:MM", conflicts_with_all = ["username", "logout"])]
-    night_pause: Option<night::NightWindow>,
-
     /// Claim the daily shop reward once per day in auto mode
     #[arg(long, requires = "auto")]
     claim_reward: bool,
@@ -97,7 +92,6 @@ enum Command {
     /// Query MyWIFI card usage
     Usage(usage::UsageArgs),
     Devices(devices::DevicesArgs),
-    Kick(devices::KickArgs),
     /// Send a Discord alert when a card is running out of data
     Monitor(monitor::MonitorArgs),
     /// Show the current session from the portal status page
@@ -147,7 +141,6 @@ fn main() -> Result<()> {
         Some(Command::Shop(shop_args)) => return reward::run(shop_args),
         Some(Command::Usage(usage_args)) => return usage::run(usage_args),
         Some(Command::Devices(devices_args)) => return devices::run_devices(devices_args),
-        Some(Command::Kick(kick_args)) => return devices::run_kick(kick_args),
         Some(Command::Monitor(monitor_args)) => return monitor::run(monitor_args),
         Some(Command::Status(status_args)) => return status::run(status_args),
         None => {}
