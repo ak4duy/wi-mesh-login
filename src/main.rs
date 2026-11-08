@@ -95,9 +95,7 @@ enum Command {
     Shop(reward::ShopArgs),
     /// Query MyWIFI card usage
     Usage(usage::UsageArgs),
-    /// List masked MAC groups seen on cards (the shop has no live device list)
     Devices(devices::DevicesArgs),
-    /// Log every device off a card
     Kick(devices::KickArgs),
     /// Send a Discord alert when a card is running out of data
     Monitor(monitor::MonitorArgs),

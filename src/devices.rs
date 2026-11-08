@@ -12,36 +12,33 @@ use crate::{reward, usage};
 #[derive(Debug, Args)]
 #[command(about = "List masked MAC groups seen on cards. The shop has no live device list")]
 pub struct DevicesArgs {
-    /// Card PINs [default: every in-use card of the saved shop account]
-    #[arg(num_args = 0.., value_name = "PIN")]
+    #[arg(
+        num_args = 0..,
+        value_name = "PIN",
+        help = "Card PINs [default: every in-use card of the saved shop account]"
+    )]
     pins: Vec<String>,
 
-    /// Print JSON instead of a table
-    #[arg(long)]
+    #[arg(long, help = "Print JSON instead of a table")]
     json: bool,
 
-    /// Directory for per-account device IDs
-    #[arg(long)]
+    #[arg(long, help = "Directory for per-account device IDs")]
     state_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
 #[command(about = "Log every device off a card")]
 pub struct KickArgs {
-    /// Card PIN
-    #[arg(value_name = "PIN")]
+    #[arg(value_name = "PIN", help = "Card PIN")]
     pin: String,
 
-    /// Skip the confirmation prompt
-    #[arg(long, short)]
+    #[arg(long, short, help = "Skip the confirmation prompt")]
     yes: bool,
 
-    /// Print JSON instead of text
-    #[arg(long)]
+    #[arg(long, help = "Print JSON instead of text")]
     json: bool,
 
-    /// Directory for per-account device IDs
-    #[arg(long)]
+    #[arg(long, help = "Directory for per-account device IDs")]
     state_dir: Option<PathBuf>,
 }
 
