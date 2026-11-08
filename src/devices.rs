@@ -55,15 +55,23 @@ struct Device {
 
 pub fn run_devices(args: DevicesArgs) -> Result<()> {
     let state_dir = args.state_dir.as_deref();
+    let session = reward::authenticate_saved(state_dir)?;
     let pins = if args.pins.is_empty() {
-        reward::fetch_active_cards(state_dir)?
-            .into_iter()
-            .map(|(pin, _)| pin)
-            .collect()
+        let reply = reward::post(
+            &session.client,
+            "mycards",
+            &session.device,
+            &session.token,
+            &[("page", "1")],
+        )?;
+        let pins = in_use_pins(reward::data(&reply)?)?;
+        if pins.is_empty() {
+            bail!("no in-use card found in shop account");
+        }
+        pins
     } else {
         args.pins
     };
-    let session = reward::authenticate_saved(state_dir)?;
 
     let mut failures = 0;
     let mut cards = Vec::new();
@@ -154,6 +162,22 @@ fn confirm(pin: &str) -> Result<bool> {
         answer.trim().to_ascii_lowercase().as_str(),
         "y" | "yes"
     ))
+}
+
+fn in_use_pins(cards: &Value) -> Result<Vec<String>> {
+    cards
+        .as_array()
+        .context("mycards response missing card list")?
+        .iter()
+        .filter(|card| card["Status"] == "Thẻ Đang Sử Dụng")
+        .map(|card| {
+            card["Pin"]
+                .as_str()
+                .filter(|pin| !pin.is_empty())
+                .map(str::to_owned)
+                .context("card missing Pin")
+        })
+        .collect()
 }
 
 fn devices_from(data: &Value) -> Vec<Device> {
@@ -284,6 +308,19 @@ mod tests {
     fn card_without_sessions_has_no_devices() {
         assert!(devices_from(&json!({"BWStatics": null})).is_empty());
         assert!(devices_from(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn in_use_pins_skips_unused_and_expired_cards() {
+        let cards = json!([
+            {"Pin": "AAA", "Status": "Thẻ Đang Sử Dụng"},
+            {"Pin": "BBB", "Status": "Thẻ Chưa Sử Dụng"},
+            {"Pin": "CCC", "Status": "Thẻ Hết Hạn"},
+            {"Pin": "DDD", "Status": "Thẻ Đang Sử Dụng"},
+        ]);
+        assert_eq!(in_use_pins(&cards).unwrap(), vec!["AAA", "DDD"]);
+        assert!(in_use_pins(&json!({})).is_err());
+        assert!(in_use_pins(&json!([{"Status": "Thẻ Đang Sử Dụng"}])).is_err());
     }
 
     #[test]
