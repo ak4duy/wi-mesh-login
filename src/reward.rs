@@ -10,6 +10,8 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::refresh::{self, Reply};
+
 const API: &str = "https://shop.login.net.vn/apimobi/v1";
 const CREDENTIAL_SERVICE: &str = "wi-mesh-login";
 const CREDENTIAL_USER: &str = "shop";
@@ -36,13 +38,13 @@ pub struct ShopArgs {
     state_dir: Option<PathBuf>,
 }
 
-fn post(
+fn send(
     client: &Client,
     endpoint: &str,
     device: &str,
     token: &str,
     fields: &[(&str, &str)],
-) -> Result<Value> {
+) -> Result<Reply> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)?
         .as_millis()
@@ -57,10 +59,28 @@ fn post(
         .header("wm-time", now)
         .form(fields)
         .send()
-        .with_context(|| format!("requesting {endpoint}"))?
-        .error_for_status()
-        .with_context(|| format!("HTTP error from {endpoint}"))?;
-    serde_json::from_str(&response.text()?).context("invalid JSON response from shop")
+        .with_context(|| format!("requesting {endpoint}"))?;
+    Ok(Reply {
+        status: response.status().as_u16(),
+        body: response.text()?,
+    })
+}
+
+fn parse(endpoint: &str, reply: Reply) -> Result<Value> {
+    if reply.status >= 400 {
+        bail!("HTTP error from {endpoint}: status {}", reply.status);
+    }
+    serde_json::from_str(&reply.body).context("invalid JSON response from shop")
+}
+
+fn post(
+    client: &Client,
+    endpoint: &str,
+    device: &str,
+    token: &str,
+    fields: &[(&str, &str)],
+) -> Result<Value> {
+    parse(endpoint, send(client, endpoint, device, token, fields)?)
 }
 
 fn data(reply: &Value) -> Result<&Value> {
@@ -237,6 +257,37 @@ pub(crate) struct AuthenticatedSession {
     pub(crate) token: String,
 }
 
+fn device_info(device: &str) -> String {
+    json!({"Id":"", "Code":"", "UserId":0, "DeviceName":"WEB_APP", "DeviceId":device,
+        "OS":"WEB", "OSVersion":"", "AppVersion":"1.0", "Network":"WIFI", "Type":"LAPTOP", "Status":"",
+        "CreatedAt":0, "UpdatedAt":0, "DeletedAt":0, "ExpiredAt":0})
+    .to_string()
+}
+
+fn request_token(client: &Client, device: &str, current: &str) -> Result<String> {
+    let reply = post(
+        client,
+        "token",
+        device,
+        current,
+        &[("deviceinfo", &device_info(device))],
+    )?;
+    Ok(token(data(&reply)?)?.to_owned())
+}
+
+fn login(client: &Client, device: &str, phone: &str, password: &str) -> Result<String> {
+    let initial_token = request_token(client, device, "")?;
+    let password_hash = format!("{:X}", Md5::digest(password.as_bytes()));
+    let login = post(
+        client,
+        "login",
+        device,
+        &initial_token,
+        &[("phone", phone), ("password", &password_hash)],
+    )?;
+    Ok(token(&data(&login)?["Token"])?.to_owned())
+}
+
 fn authenticate(
     phone: &str,
     password: &str,
@@ -252,31 +303,23 @@ fn authenticate(
         .redirect(Policy::none())
         .user_agent("Mozilla/5.0")
         .build()?;
-    let device_info = json!({"Id":"", "Code":"", "UserId":0, "DeviceName":"WEB_APP", "DeviceId":device,
-        "OS":"WEB", "OSVersion":"", "AppVersion":"1.0", "Network":"WIFI", "Type":"LAPTOP", "Status":"",
-        "CreatedAt":0, "UpdatedAt":0, "DeletedAt":0, "ExpiredAt":0}).to_string();
-    let initial = post(
-        &client,
-        "token",
-        &device,
-        "",
-        &[("deviceinfo", &device_info)],
-    )?;
-    let initial_token = token(data(&initial)?)?;
-    let password_hash = format!("{:X}", Md5::digest(password.as_bytes()));
-    let login = post(
-        &client,
-        "login",
-        &device,
-        initial_token,
-        &[("phone", phone), ("password", &password_hash)],
-    )?;
-    let authenticated = token(&data(&login)?["Token"])?;
+    let token = login(&client, &device, phone, password)?;
     Ok(AuthenticatedSession {
         client,
         device,
-        token: authenticated.to_owned(),
+        token,
     })
+}
+
+pub(crate) fn renew_token(session: &mut AuthenticatedSession) -> Result<()> {
+    session.token = request_token(&session.client, &session.device, &session.token)?;
+    Ok(())
+}
+
+pub(crate) fn relogin(session: &mut AuthenticatedSession) -> Result<()> {
+    let (phone, password) = load_credentials()?;
+    session.token = login(&session.client, &session.device, &phone, &password)?;
+    Ok(())
 }
 
 pub(crate) fn authenticate_saved(
@@ -284,6 +327,23 @@ pub(crate) fn authenticate_saved(
 ) -> Result<AuthenticatedSession> {
     let (phone, password) = load_credentials()?;
     authenticate(&phone, &password, state_dir)
+}
+
+pub(crate) fn call(
+    session: &mut AuthenticatedSession,
+    endpoint: &str,
+    fields: &[(&str, &str)],
+) -> Result<Value> {
+    let reply = refresh::execute(session, |session| {
+        send(
+            &session.client,
+            endpoint,
+            &session.device,
+            &session.token,
+            fields,
+        )
+    })?;
+    parse(endpoint, reply)
 }
 
 pub(crate) fn cached_cards() -> Result<Vec<(String, String)>> {
@@ -305,14 +365,8 @@ pub(crate) fn cached_cards() -> Result<Vec<(String, String)>> {
 pub(crate) fn fetch_active_cards(
     state_dir: Option<&std::path::Path>,
 ) -> Result<Vec<(String, String)>> {
-    let session = authenticate_saved(state_dir)?;
-    let reply = post(
-        &session.client,
-        "mycards",
-        &session.device,
-        &session.token,
-        &[("page", "1")],
-    )?;
+    let mut session = authenticate_saved(state_dir)?;
+    let reply = call(&mut session, "mycards", &[("page", "1")])?;
     let mut in_use: Vec<_> = data(&reply)?
         .as_array()
         .context("mycards response missing card list")?
@@ -368,7 +422,7 @@ pub fn run(args: ShopArgs) -> Result<()> {
     } else {
         load_credentials()?
     };
-    let session = authenticate(&phone, &password, args.state_dir.as_deref())?;
+    let mut session = authenticate(&phone, &password, args.state_dir.as_deref())?;
     if args.login {
         save_credentials(&phone, &password)?;
         #[cfg(target_os = "windows")]
@@ -377,13 +431,7 @@ pub fn run(args: ShopArgs) -> Result<()> {
         println!("Shop login successful, saved in OS credential store");
         return Ok(());
     }
-    let rewards = post(
-        &session.client,
-        "rewards",
-        &session.device,
-        &session.token,
-        &[],
-    )?;
+    let rewards = call(&mut session, "rewards", &[])?;
     let tasks = data(&rewards)?["Tasks"]
         .as_array()
         .context("rewards response missing Tasks")?;
@@ -406,13 +454,7 @@ pub fn run(args: ShopArgs) -> Result<()> {
             .as_str()
             .filter(|s| !s.is_empty())
             .context("task missing key")?;
-        let reply = post(
-            &session.client,
-            "get-score",
-            &session.device,
-            &session.token,
-            &[("key", key)],
-        )?;
+        let reply = call(&mut session, "get-score", &[("key", key)])?;
         if reply["result"] == false
             && reply["code"] == 2
             && reply["msg"] == "Bạn đã nhận điểm thưởng này rồi."

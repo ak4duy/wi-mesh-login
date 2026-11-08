@@ -6,7 +6,10 @@ use reqwest::blocking::multipart::Form;
 use serde_json::Value;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-use crate::reward::{self, AuthenticatedSession};
+use crate::{
+    refresh::{self, Reply},
+    reward::{self, AuthenticatedSession},
+};
 
 const API_URL: &str = "https://mywifi.vn/apimobi/v1/card-check";
 
@@ -27,7 +30,7 @@ pub struct UsageArgs {
 }
 
 pub fn run(args: UsageArgs) -> Result<()> {
-    let session = reward::authenticate_saved(args.state_dir.as_deref())?;
+    let mut session = reward::authenticate_saved(args.state_dir.as_deref())?;
 
     let mut failures = 0;
     for (index, pin) in args.pins.iter().enumerate() {
@@ -37,7 +40,7 @@ pub fn run(args: UsageArgs) -> Result<()> {
             continue;
         }
 
-        match card_check(&session, pin) {
+        match card_check(&mut session, pin) {
             Ok(data) => print_card(index + 1, &data, args.sessions),
             Err(error) => {
                 eprintln!("Card {}: {error:#}", index + 1);
@@ -56,34 +59,44 @@ pub fn run(args: UsageArgs) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn card_check(session: &AuthenticatedSession, pin: &str) -> Result<Value> {
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .context("system clock is before the Unix epoch")?
-        .as_millis()
-        .to_string();
-
-    let response = session
-        .client
-        .post(API_URL)
-        .query(&[("key", pin)])
-        .header("wm-token", &session.token)
-        .header("wm-device", &session.device)
-        .header("wm-time", now_ms)
-        .multipart(Form::new())
-        .send()
-        .context("requesting card usage")?
-        .error_for_status()
-        .context("MyWIFI API returned an HTTP error")?;
+pub(crate) fn card_check(session: &mut AuthenticatedSession, pin: &str) -> Result<Value> {
+    let response = refresh::execute(session, |session| {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .context("system clock is before the Unix epoch")?
+            .as_millis()
+            .to_string();
+        let response = session
+            .client
+            .post(API_URL)
+            .query(&[("key", pin)])
+            .header("wm-token", &session.token)
+            .header("wm-device", &session.device)
+            .header("wm-time", now_ms)
+            .multipart(Form::new())
+            .send()
+            .context("requesting card usage")?;
+        Ok(Reply {
+            status: response.status().as_u16(),
+            body: response.text().context("reading MyWIFI API response")?,
+        })
+    })?;
+    if response.status >= 400 {
+        bail!(
+            "MyWIFI API returned an HTTP error: status {}",
+            response.status
+        );
+    }
     let reply: Value =
-        serde_json::from_str(&response.text().context("reading MyWIFI API response")?)
-            .context("MyWIFI API returned invalid JSON")?;
+        serde_json::from_str(&response.body).context("MyWIFI API returned invalid JSON")?;
 
     if reply.get("result").and_then(Value::as_bool) != Some(true) {
         let code = reply.get("code").and_then(Value::as_i64);
         match code {
             Some(2) => {
-                bail!("authorization failed (code 2); run `wi-mesh-login shop --login` again")
+                bail!(
+                    "authorization failed (code 2) after re-login; run `wi-mesh-login shop --login` again"
+                )
             }
             Some(3) => {
                 bail!("card PIN is incorrect, unactivated, or not yet reporting usage (code 3)")
