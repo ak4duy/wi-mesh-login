@@ -66,6 +66,24 @@ Cards come from the saved shop account. `--auto` keeps using the card that last 
 
 `--night-pause 23:00-06:00` calls the shop `card-pause` (1 week) on the card of the live portal session when the window starts and `card-resume` when it ends. No login is attempted inside the window. The window uses the local time zone read at startup and may wrap midnight. The paused card is kept in `night-paused` under the state directory, so a restart still resumes it. If the shop refuses to pause (for example the card does not support pausing) or no session is live, `--auto` stays online and retries every 10 minutes. If the resume fails (for example the shop is unreachable while offline), `--auto` logs in with another card, skipping the paused one, and retries the resume every minute.
 
+## Session status
+
+```sh
+wi-mesh-login status
+
+wi-mesh-login status --json
+
+wi-mesh-login status --interface wlan0 --timeout-seconds 10
+```
+
+Reads `https://login.net.vn/status` from the logged-in IP without a shop login, and prints the account, IP address, uploaded/downloaded data, connected time, and remaining time. It fails if the device is not logged in. Remaining time is the card's remaining validity, not a per-session timer: logging out and in again does not reset it.
+
+| Option              | Purpose                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------- |
+| `--interface`       | Adapter name to use                                                                                |
+| `--timeout-seconds` | HTTP timeout (default 30)                                                                          |
+| `--json`            | Print `user`, `ip`, `uploaded_bytes`, `downloaded_bytes`, `connected_seconds`, `remaining_seconds` |
+
 ## Shop commands
 
 > [!IMPORTANT]  

@@ -16,6 +16,7 @@ mod monitor;
 mod night;
 mod refresh;
 mod reward;
+mod status;
 mod usage;
 use if_addrs::get_if_addrs;
 use reqwest::{blocking::Client, header, redirect::Policy};
@@ -99,6 +100,8 @@ enum Command {
     Kick(devices::KickArgs),
     /// Send a Discord alert when a card is running out of data
     Monitor(monitor::MonitorArgs),
+    /// Show the current session from the portal status page
+    Status(status::StatusArgs),
 }
 
 struct Artifacts {
@@ -146,6 +149,7 @@ fn main() -> Result<()> {
         Some(Command::Devices(devices_args)) => return devices::run_devices(devices_args),
         Some(Command::Kick(kick_args)) => return devices::run_kick(kick_args),
         Some(Command::Monitor(monitor_args)) => return monitor::run(monitor_args),
+        Some(Command::Status(status_args)) => return status::run(status_args),
         None => {}
     }
 
@@ -283,13 +287,17 @@ fn logout(client: &Client, artifacts: &Artifacts) -> Result<()> {
 }
 
 fn build_client(args: &Args) -> Result<Client> {
+    client_for(args.interface.as_deref(), args.timeout_seconds)
+}
+
+fn client_for(interface: Option<&str>, timeout_seconds: u64) -> Result<Client> {
     let mut builder = Client::builder()
         .cookie_store(true)
         .redirect(Policy::limited(10))
-        .timeout(Duration::from_secs(args.timeout_seconds))
+        .timeout(Duration::from_secs(timeout_seconds))
         .user_agent(USER_AGENT);
 
-    if let Some(interface) = &args.interface {
+    if let Some(interface) = interface {
         let address = interface_address(interface)?;
         builder = builder.local_address(Some(address));
     }

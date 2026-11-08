@@ -1,0 +1,161 @@
+
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <title>Login->Status</title>
+
+    <meta http-equiv="refresh" content="60">
+
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="shortcut icon" href="https://ex.login.net.vn/static/favicon.ico?v=1.5">
+    <link rel="apple-touch-icon" href="https://ex.login.net.vn/static/apple-touch-icon.png">
+    <meta content="Network Center" name="description">
+    <meta content="Wifi.Center" name="author">
+    <link rel="stylesheet" href="./css/bootstrap.min.css" />
+    <link rel="stylesheet" href="./css/core.css" />
+    <script src="./css/jquery.slim.min.js"></script>
+    <script src="./css/bootstrap.min.js"></script>
+
+
+    <script language="JavaScript">
+
+        function openLogout() {
+            if (window.name != 'hotspot_status') return true;
+            open('https://login.net.vn/logout', 'hotspot_logout', 'toolbar=0,location=0,directories=0,status=0,menubars=0,resizable=1,width=280,height=250');
+            window.close();
+            return false;
+        }
+
+    </script>
+</head>
+
+<body
+
+>
+
+
+    <div id='main_page'>
+        <div class="header">
+            <nav class="navbar navbar-expand-lg">
+                <div class="container">
+                    <div class="navbar-branch posRe displayRow">
+                        <a href="/" class="header__logo containHeaderLogo">
+                            <img src='./images/logo_imarketing.svg' style="max-width: 100%; max-height: 100%" />
+                        </a>
+                        <div class="displayCol alCenter jfCenter containTitlePage">
+                            <span class="headerSmall customHeaderSmallMobile">ĐĂNG NHẬP ĐỂ SỬ DỤNG INTERNET</span>
+                            <span class="headerLarge">HỆ THỐNG MẠNG INTERNET</span>
+                        </div>
+                        <div class="f1 noneMobile"></div>
+                        <div class="displayRow alCenter containInfoSupport noneMobile">
+                            <div class="containPhoneIcon">
+                                <img src="./images/Phone_icon.svg" class="imgPowered" />
+                            </div>
+                            <a href="tel:0941977677" class="displayCol ml10 alCenter pointer">
+                                <span class="headerSmall">HỖ TRỢ KỸ THUẬT</span>
+                                <span class="headerLarge">0941.977.677</a>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        </div>
+
+        <div class="general">
+            <div class="container displayRow">
+                <div class="ads--left">
+                    <div class="col-12 noneMobile ">
+                        <img class="imgLeft" src='./images/noti-left.jpg'>
+                    </div>
+                </div>
+                <div class="payment--center" id="payment">
+                    <!--<a href="#{linkGuide}" class="containImageTop" target="_self">
+                        <img style="max-width: 100%" src='./images/noti-top.jpg' />
+                    </a>-->
+                    <div class="contain_main_content">
+                        <div class="payment__title text-center mb-2 col-12" id='title_connect' style='padding-left: 20px; padding-right: 20px'>
+                            <span class="txtInfoAccount">THÔNG TIN TÀI KHOẢN</span>
+                            <div class="displayRow alCenter noneDestop">
+                                <div class="containPhoneIcon">
+                                    <img src="./images/green-phone_icon.svg" class="imgPowered" />
+                                </div>
+                                <div class="displayCol ml10 alCenter">
+                                    <span class="headerSmall" style="color: #000">HỖ TRỢ KỸ THUẬT</span>
+                                    <a href="tel:0941977677" class="headerLarge" style="color: #0BB558">0941.977.677</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="displayRow mt20" id="complete" style="display: block;">
+                        <form action="https://login.net.vn/logout" name="logout" onSubmit="return openLogout()">
+                            <div class="title__txt font--bold--size text-center" style="color: #868686">KẾT NỐI THÀNH CÔNG!</div>
+                            <div class="displayCol jfCenter alCenter" id="info_card_login" style="display: flex;">
+                                <div class="contain_info_card_login mt10">
+
+                                    <div class="displayRow alCenter jfCenter divInfoWhite pd10-20"> <span class="txtUser">Xin Chào: ABCD1234</span> </div>
+
+                                    <div class="displayRow alCenter jfCenter divInfoGrey pd10-20"> <span class="txtInfoCard">IP address: 10.0.0.2</span> </div>
+                                    <div class="displayCol alCenter jfCenter divInfoWhite pd10-20"><span class="txtInfoCard">Dung Lượng Sử Dụng Up/Down: 28.1 MiB / 428.9 MiB</span></div>
+
+                                    <div class="displayCol alCenter jfCenter divInfoWhite pd10-20"><span class="txtInfoCard">Thời Gian Kết Nối/Còn Lại: 18m48s / 28d19h59m57s</span></div>
+
+                                </div>
+                            </div>
+                            <div class="displayRow alCenter jfCenter mt10">
+
+                                <button type="submit" class="displayRow alCenter jfCenter" style="background-color: transparent; border-color: transparent;">
+                                    <span class="mr10" style="color: #666">Thoát</span>
+                                    <div style="width: 20px; height: 20px; margin-left: 5px;">
+                                        <img src="./images/exit_ico.svg" style="max-width: 100%; max-height: 100%">
+                                    </div>
+                                </button>
+
+
+                            </div>
+                        </form>
+                        </div>
+                    </div>
+                    <div class="imagePromotion noneDestop mt20 displayBlock">
+                        <img style="max-width: 100%" src='./images/noti-bot.jpg' />
+                    </div>
+                </div>
+                <div class="ads--right">
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div class="container">
+                <div class="row mt-4 pt-4">
+                    <div class="col-12 displayRow jfCenter">
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <div style="position: fixed; top: 0px; left: 0px; right: 0px; bottom: 0px; background: #FFF; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 1000" id='check_ok'>
+        <span id='txt_noti'>Đang kiểm tra...</span>
+        <noscript>Vui lòng bật javascripts</noscript>
+    </div>
+    <script type="text/javascript">
+    function getCookie(cname) {
+        var name = cname + "=";
+        var ca = document.cookie.split(';');
+        for(var i = 0; i <ca.length; i++) {
+            var c = ca[i];
+            while (c.charAt(0)==' ') {
+                c = c.substring(1);
+            }
+            if (c.indexOf(name) == 0) {
+                return c.substring(name.length,c.length);
+            }
+        }
+        return "";
+    };
+    </script>
+
+</body>
+
+</html>
