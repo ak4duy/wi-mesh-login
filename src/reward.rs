@@ -83,7 +83,7 @@ fn post(
     parse(endpoint, send(client, endpoint, device, token, fields)?)
 }
 
-fn data(reply: &Value) -> Result<&Value> {
+pub(crate) fn data(reply: &Value) -> Result<&Value> {
     if reply["result"] != true {
         bail!(
             "shop rejected request (code {}): {}",

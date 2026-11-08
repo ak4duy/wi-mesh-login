@@ -176,14 +176,8 @@ fn save_paused(pins: &[String]) -> Result<()> {
 }
 
 fn card_request(endpoint: &str, fields: &[(&str, &str)]) -> Result<()> {
-    let session = reward::authenticate_saved(None)?;
-    let reply = reward::post(
-        &session.client,
-        endpoint,
-        &session.device,
-        &session.token,
-        fields,
-    )?;
+    let mut session = reward::authenticate_saved(None)?;
+    let reply = reward::call(&mut session, endpoint, fields)?;
     reward::data(&reply).map(|_| ())
 }
 
