@@ -5,7 +5,9 @@ use reqwest::blocking::Client;
 use scraper::{Html, Selector};
 
 use crate::{
-    Args, build_client, internet_ok, login,
+    Args,
+    auto_reward::DailyClaim,
+    build_client, internet_ok, login,
     night::{self, Night, Tick},
     portal_online, reward,
 };
@@ -74,6 +76,7 @@ pub fn run(args: &Args) -> Result<()> {
     );
     let client = build_client(args)?;
     let mut rotation = Rotation::default();
+    let mut daily_claim = args.claim_reward.then(DailyClaim::new);
     let _ = reward::fetch_active_cards(None);
     println!(
         "Auto login running, checking every {}s. Press Ctrl+C to stop.",
@@ -99,6 +102,9 @@ pub fn run(args: &Args) -> Result<()> {
             }
         }
         if internet_ok(&client) {
+            if let Some(claim) = daily_claim.as_mut() {
+                claim.tick();
+            }
             backoff.reset();
             thread::sleep(interval);
             continue;

@@ -23,13 +23,16 @@ wi-mesh-login --auto --interval 60 --retry-after 10 --no-logs
 
 # Pause the card through the shop from 23:00 to 06:00 and resume it after
 wi-mesh-login --auto --night-pause 23:00-06:00
+
+# Also claim the daily shop reward once per day (uses saved shop credentials)
+wi-mesh-login --auto --claim-reward --no-logs
 ```
 
 Use `wi-mesh-login --help` to see command-line options. The usage is:
 
 ```text
 wi-mesh-login [OPTIONS] <USERNAME> <PASSWORD>
-wi-mesh-login [OPTIONS] --auto [--interval SECONDS] [--retry-after SECONDS] [--max-retry-after SECONDS] [--night-pause HH:MM-HH:MM]
+wi-mesh-login [OPTIONS] --auto [--claim-reward] [--interval SECONDS] [--retry-after SECONDS] [--max-retry-after SECONDS] [--night-pause HH:MM-HH:MM]
 wi-mesh-login [OPTIONS] --logout
 ```
 
@@ -47,6 +50,7 @@ Options include:
 | `--retry-after`     | Seconds before the first retry of a failed `--auto` login, doubled on each failure (default 10) |
 | `--max-retry-after` | Longest wait between failed `--auto` retries (default 300)       |
 | `--night-pause`     | Pause the card through the shop during a local time window (off by default) |
+| `--claim-reward`    | Claim the daily shop reward once per day (see the auto login service below) |
 
 ### Auto mode
 
@@ -153,4 +157,20 @@ Run it every 10 minutes with the systemd timer:
 ```sh
 cp systemd/wi-mesh-monitor.{service,timer} ~/.config/systemd/user/
 systemctl --user enable --now wi-mesh-monitor.timer
+```
+
+## Auto login service
+
+```sh
+cp systemd/wi-mesh-login.service ~/.config/systemd/user/
+systemctl --user enable --now wi-mesh-login.service
+```
+
+`--claim-reward` in the unit claims the daily reward from inside the login loop, so `wi-mesh-reward.timer` is optional. The last claim date (UTC+7) is stored in `last-claim` under the state directory with private permissions. A failed claim is logged and retried every 30 minutes without interrupting auto login. Run `wi-mesh-login shop --login` once beforehand.
+
+To claim on a schedule without `--auto`, use the standalone timer instead:
+
+```sh
+cp systemd/wi-mesh-reward.{service,timer} ~/.config/systemd/user/
+systemctl --user enable --now wi-mesh-reward.timer
 ```

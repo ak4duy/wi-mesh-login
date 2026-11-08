@@ -431,7 +431,11 @@ pub fn run(args: ShopArgs) -> Result<()> {
         println!("Shop login successful, saved in OS credential store");
         return Ok(());
     }
-    let rewards = call(&mut session, "rewards", &[])?;
+    claim_rewards(&mut session)
+}
+
+pub(crate) fn claim_rewards(session: &mut AuthenticatedSession) -> Result<()> {
+    let rewards = call(session, "rewards", &[])?;
     let tasks = data(&rewards)?["Tasks"]
         .as_array()
         .context("rewards response missing Tasks")?;
@@ -454,7 +458,7 @@ pub fn run(args: ShopArgs) -> Result<()> {
             .as_str()
             .filter(|s| !s.is_empty())
             .context("task missing key")?;
-        let reply = call(&mut session, "get-score", &[("key", key)])?;
+        let reply = call(session, "get-score", &[("key", key)])?;
         if reply["result"] == false
             && reply["code"] == 2
             && reply["msg"] == "Bạn đã nhận điểm thưởng này rồi."

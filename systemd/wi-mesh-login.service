@@ -4,7 +4,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=%h/.local/bin/wi-mesh-login --auto --interval 60 --retry-after 10 --no-logs
+ExecStart=%h/.local/bin/wi-mesh-login --auto --claim-reward --interval 60 --retry-after 10 --no-logs
 Restart=always
 RestartSec=10
 

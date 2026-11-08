@@ -10,6 +10,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 
 mod auto;
+mod auto_reward;
 mod monitor;
 mod night;
 mod refresh;
@@ -73,6 +74,10 @@ struct Args {
     /// Pause the card through the shop during this local time window, e.g. 23:00-06:00
     #[arg(long, value_name = "HH:MM-HH:MM", conflicts_with_all = ["username", "logout"])]
     night_pause: Option<night::NightWindow>,
+
+    /// Claim the daily shop reward once per day in auto mode
+    #[arg(long, requires = "auto")]
+    claim_reward: bool,
 
     /// Post login without logs, debug artifacts, or connectivity checks
     #[arg(long, conflicts_with = "logout")]
