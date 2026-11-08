@@ -63,6 +63,8 @@ wi-mesh-login shop --reward
 wi-mesh-login shop --forget
 ```
 
+Shop requests recover from an expired session on their own. On HTTP 405 or an authorization failure (code 2), the request renews the shop token and retries once, then logs in again with the saved credentials and retries once more. Run `shop --login` again only when that re-login fails.
+
 Options include:
 
 | Option                    | Purpose                                      |

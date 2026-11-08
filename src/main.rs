@@ -10,6 +10,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 
 mod monitor;
+mod refresh;
 mod reward;
 mod usage;
 use if_addrs::get_if_addrs;

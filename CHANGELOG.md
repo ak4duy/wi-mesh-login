@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Features
+
+- feat(reward): refresh expired shop session and retry the request
+
 ## [0.3.8] - 2026-11-07
 
 ### Features

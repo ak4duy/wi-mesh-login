@@ -93,10 +93,10 @@ pub fn run(args: MonitorArgs) -> Result<()> {
         Err(error) => return Err(error).context("reading monitor state"),
     };
 
-    let session = reward::authenticate_saved(None)?;
+    let mut session = reward::authenticate_saved(None)?;
     let mut failures = 0;
     for pin in &pins {
-        match check_card(&config, &session, pin, state.get(pin).copied()) {
+        match check_card(&config, &mut session, pin, state.get(pin).copied()) {
             Ok(Some(threshold)) => {
                 state.insert(pin.clone(), threshold);
                 reward::write_private(&state_path, &serde_json::to_string(&state)?)?;
@@ -116,7 +116,7 @@ pub fn run(args: MonitorArgs) -> Result<()> {
 
 fn check_card(
     config: &MonitorConfig,
-    session: &AuthenticatedSession,
+    session: &mut AuthenticatedSession,
     pin: &str,
     last_alert: Option<f64>,
 ) -> Result<Option<f64>> {
