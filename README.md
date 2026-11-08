@@ -18,15 +18,18 @@ wi-mesh-login YOUR_USERNAME YOUR_PASSWORD
 
 wi-mesh-login YOUR_USERNAME YOUR_PASSWORD --no-logs
 
-# Keep running: check internet every 60s, log in with the first in-use card when offline
+# Keep running: check internet every 60s, log in with the in-use cards when logged out
 wi-mesh-login --auto --interval 60 --retry-after 10 --no-logs
+
+# Pause the card through the shop from 23:00 to 06:00 and resume it after
+wi-mesh-login --auto --night-pause 23:00-06:00
 ```
 
 Use `wi-mesh-login --help` to see command-line options. The usage is:
 
 ```text
 wi-mesh-login [OPTIONS] <USERNAME> <PASSWORD>
-wi-mesh-login [OPTIONS] --auto [--interval SECONDS] [--retry-after SECONDS]
+wi-mesh-login [OPTIONS] --auto [--interval SECONDS] [--retry-after SECONDS] [--max-retry-after SECONDS] [--night-pause HH:MM-HH:MM]
 wi-mesh-login [OPTIONS] --logout
 ```
 
@@ -39,9 +42,25 @@ Options include:
 | `--timeout-seconds` | HTTP timeout                                                     |
 | `--logout`          | End the current portal session                                   |
 | `--no-logs`         | Post login without logs, debug artifacts, or connectivity checks |
-| `--auto`            | Keep running, re-login with the first in-use card when offline   |
+| `--auto`            | Keep running, re-login with in-use cards when logged out         |
 | `--interval`        | Seconds between internet checks in `--auto` mode (default 60)    |
-| `--retry-after`     | Seconds before retrying a failed `--auto` login (default 10)     |
+| `--retry-after`     | Seconds before the first retry of a failed `--auto` login, doubled on each failure (default 10) |
+| `--max-retry-after` | Longest wait between failed `--auto` retries (default 300)       |
+| `--night-pause`     | Pause the card through the shop during a local time window (off by default) |
+
+### Auto mode
+
+When the internet check fails, `--auto` asks `https://login.net.vn/status` what is wrong before logging in:
+
+- **Logged out** (no `Xin Chào: <user>` on the status page): log in with a saved card.
+- **Still logged in**: the upstream is down, so it waits instead of logging in again.
+- **Portal unreachable**: no link to the Wi-MESH network, so it waits.
+
+Failures back off exponentially from `--retry-after` up to `--max-retry-after`, with each wait randomly shortened by up to half. A success resets the backoff.
+
+Cards come from the saved shop account. `--auto` keeps using the card that last worked and moves to the next in-use card when it is exhausted or rejected, wrapping around the list.
+
+`--night-pause 23:00-06:00` calls the shop `card-pause` (1 week) on the card in use when the window starts and `card-resume` when it ends. No login is attempted inside the window. The window uses the local time zone read at startup and may wrap midnight. The pending resume is kept in `night-paused` under the state directory, so a restart still resumes the card. If the shop refuses to pause (for example the card does not support pausing), `--auto` stays online and retries every 10 minutes.
 
 ## Shop commands
 

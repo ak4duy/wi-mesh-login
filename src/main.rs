@@ -9,7 +9,9 @@ use std::{
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 
+mod auto;
 mod monitor;
+mod night;
 mod refresh;
 mod reward;
 mod usage;
@@ -52,7 +54,7 @@ struct Args {
     #[arg(long)]
     logout: bool,
 
-    /// Log in with the first card in use from the saved shop account
+    /// Keep running and log in with in-use cards from the saved shop account, rotating when one fails
     #[arg(long, conflicts_with = "logout")]
     auto: bool,
 
@@ -60,9 +62,17 @@ struct Args {
     #[arg(long, value_name = "SECONDS", conflicts_with_all = ["username", "logout"])]
     interval: Option<u64>,
 
-    /// Seconds to wait before retrying a failed auto login [default: 10]
+    /// Seconds before the first retry of a failed auto login, doubled on each failure [default: 10]
     #[arg(long, value_name = "SECONDS", conflicts_with_all = ["username", "logout"])]
     retry_after: Option<u64>,
+
+    /// Longest wait in seconds between failed auto retries [default: 300]
+    #[arg(long, value_name = "SECONDS", conflicts_with_all = ["username", "logout"])]
+    max_retry_after: Option<u64>,
+
+    /// Pause the card through the shop during this local time window, e.g. 23:00-06:00
+    #[arg(long, value_name = "HH:MM-HH:MM", conflicts_with_all = ["username", "logout"])]
+    night_pause: Option<night::NightWindow>,
 
     /// Post login without logs, debug artifacts, or connectivity checks
     #[arg(long, conflicts_with = "logout")]
@@ -135,71 +145,12 @@ fn main() -> Result<()> {
     }
 
     if args.auto {
-        let interval = Duration::from_secs(args.interval.unwrap_or(60));
-        let retry_after = args.retry_after.unwrap_or(10);
-        let client = build_client(&args)?;
-        let _ = reward::fetch_active_cards(None);
-        println!(
-            "Auto login running, checking every {}s. Press Ctrl+C to stop.",
-            interval.as_secs()
-        );
-        loop {
-            if internet_ok(&client) {
-                thread::sleep(interval);
-                continue;
-            }
-            println!("No internet, trying to login...");
-            match auto_login(&args) {
-                Ok(()) => {
-                    println!(
-                        "Auto login succeeded. Next check in {}s.",
-                        interval.as_secs()
-                    );
-                    thread::sleep(interval);
-                }
-                Err(error) => {
-                    eprintln!("Auto login failed: {error:#}. Retrying in {retry_after}s...");
-                    thread::sleep(Duration::from_secs(retry_after));
-                }
-            }
-        }
+        return auto::run(&args);
     }
 
     let username = args.username.as_deref().expect("clap requires a username");
     let password = args.password.as_deref().expect("clap requires a password");
     login(&args, username, password)
-}
-
-fn auto_login(args: &Args) -> Result<()> {
-    let (cards, cached) = match reward::fetch_active_cards(None) {
-        Ok(cards) => (cards, false),
-        Err(error) => {
-            eprintln!("Shop unreachable ({error:#}), using cached cards.");
-            (reward::cached_cards()?, true)
-        }
-    };
-    let mut last_error = None;
-    for (pin, pass) in &cards {
-        let result = login(args, pin, pass).and_then(|()| {
-            if args.no_logs && !portal_online(&build_client(args)?, &args.entry_url) {
-                bail!("login was posted, but internet connectivity still failed");
-            }
-            Ok(())
-        });
-        match result {
-            Ok(()) => {
-                if cached {
-                    let _ = reward::fetch_active_cards(None);
-                }
-                return Ok(());
-            }
-            Err(error) => {
-                eprintln!("Card {pin} failed: {error:#}");
-                last_error = Some(error);
-            }
-        }
-    }
-    Err(last_error.expect("cards is never empty")).context("every card failed")
 }
 
 fn start_artifacts(args: &Args) -> Result<Artifacts> {
