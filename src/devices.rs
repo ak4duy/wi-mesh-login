@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use crate::{reward, usage};
 
 #[derive(Debug, Args)]
-#[command(about = "List devices seen on cards, grouped by MAC address")]
+#[command(about = "List masked MAC groups seen on cards. The shop has no live device list")]
 pub struct DevicesArgs {
     /// Card PINs [default: every in-use card of the saved shop account]
     #[arg(num_args = 0.., value_name = "PIN")]
@@ -46,11 +46,13 @@ pub struct KickArgs {
 }
 
 #[derive(Debug, PartialEq)]
-struct Device {
+struct MacGroup {
     mac: String,
     sessions: usize,
     last_seen: String,
     online_seconds: u64,
+    download_bytes: u64,
+    upload_bytes: u64,
 }
 
 pub fn run_devices(args: DevicesArgs) -> Result<()> {
@@ -82,7 +84,7 @@ pub fn run_devices(args: DevicesArgs) -> Result<()> {
             continue;
         }
         match usage::card_check(&session, pin) {
-            Ok(data) => cards.push((pin, devices_from(&data))),
+            Ok(data) => cards.push((pin, mac_groups_from(&data))),
             Err(error) => {
                 eprintln!("Card {pin}: {error:#}");
                 failures += 1;
@@ -93,20 +95,20 @@ pub fn run_devices(args: DevicesArgs) -> Result<()> {
     if args.json {
         let output: Vec<Value> = cards
             .iter()
-            .map(|(pin, devices)| {
+            .map(|(pin, groups)| {
                 json!({
                     "pin": pin,
-                    "devices": devices.iter().map(device_json).collect::<Vec<_>>(),
+                    "mac_groups": groups.iter().map(mac_group_json).collect::<Vec<_>>(),
                 })
             })
             .collect();
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        for (index, (pin, devices)) in cards.iter().enumerate() {
+        for (index, (pin, groups)) in cards.iter().enumerate() {
             if index > 0 {
                 println!();
             }
-            print_devices(pin, devices);
+            print_mac_groups(pin, groups);
         }
     }
 
@@ -132,15 +134,7 @@ pub fn run_kick(args: KickArgs) -> Result<()> {
         &session.token,
         &[("key", &args.pin)],
     )?;
-    if reply["result"] != true {
-        bail!(
-            "shop rejected request (code {}): {}",
-            reply["code"],
-            reply["msg"].as_str().unwrap_or("unknown error")
-        );
-    }
-
-    let message = reply["msg"].as_str().unwrap_or("Success");
+    let message = kick_message(&reply)?;
     if args.json {
         let output = json!({"pin": args.pin, "result": true, "msg": message});
         println!("{}", serde_json::to_string_pretty(&output)?);
@@ -148,6 +142,17 @@ pub fn run_kick(args: KickArgs) -> Result<()> {
         println!("Card {}: {message}", args.pin);
     }
     Ok(())
+}
+
+fn kick_message(reply: &Value) -> Result<String> {
+    if reply["result"] != true {
+        bail!(
+            "shop rejected request (code {}): {}",
+            reply["code"],
+            reply["msg"].as_str().unwrap_or("unknown error")
+        );
+    }
+    Ok(reply["msg"].as_str().unwrap_or("Success").to_owned())
 }
 
 fn confirm(pin: &str) -> Result<bool> {
@@ -180,29 +185,52 @@ fn in_use_pins(cards: &Value) -> Result<Vec<String>> {
         .collect()
 }
 
-fn devices_from(data: &Value) -> Vec<Device> {
-    let mut devices: Vec<Device> = Vec::new();
+fn mac_groups_from(data: &Value) -> Vec<MacGroup> {
+    let mut groups: Vec<MacGroup> = Vec::new();
     let sessions = data
         .get("BWStatics")
         .and_then(Value::as_array)
         .map_or(&[][..], Vec::as_slice);
     for session in sessions {
-        let mac = session["MACs"].as_str().unwrap_or("unknown");
         let seconds = session["TotalTime"].as_str().map_or(0, parse_duration);
-        match devices.iter_mut().find(|device| device.mac == mac) {
-            Some(device) => {
-                device.sessions += 1;
-                device.online_seconds += seconds;
-            }
-            None => devices.push(Device {
-                mac: mac.to_owned(),
-                sessions: 1,
-                last_seen: session["StartAt"].as_str().unwrap_or("-").to_owned(),
-                online_seconds: seconds,
-            }),
+        let download = session["Download"].as_str().map_or(0, parse_size);
+        let upload = session["Upload"].as_str().map_or(0, parse_size);
+        for label in mac_labels(session["MACs"].as_str().unwrap_or_default()) {
+            let index = match groups.iter().position(|group| group.mac == label) {
+                Some(index) => index,
+                None => {
+                    groups.push(MacGroup {
+                        mac: label,
+                        sessions: 0,
+                        last_seen: session["StartAt"].as_str().unwrap_or("-").to_owned(),
+                        online_seconds: 0,
+                        download_bytes: 0,
+                        upload_bytes: 0,
+                    });
+                    groups.len() - 1
+                }
+            };
+            let group = &mut groups[index];
+            group.sessions += 1;
+            group.online_seconds += seconds;
+            group.download_bytes += download;
+            group.upload_bytes += upload;
         }
     }
-    devices
+    groups
+}
+
+fn mac_labels(text: &str) -> Vec<String> {
+    let labels: Vec<String> = text
+        .split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+        .filter(|label| !label.is_empty())
+        .map(str::to_owned)
+        .collect();
+    if labels.is_empty() {
+        vec!["unknown".to_owned()]
+    } else {
+        labels
+    }
 }
 
 fn parse_duration(text: &str) -> u64 {
@@ -215,6 +243,25 @@ fn parse_duration(text: &str) -> u64 {
     }
 }
 
+fn parse_size(text: &str) -> u64 {
+    let mut parts = text.split_whitespace();
+    let (Some(number), Some(unit), None) = (parts.next(), parts.next(), parts.next()) else {
+        return 0;
+    };
+    let Ok(number) = number.parse::<f64>() else {
+        return 0;
+    };
+    let scale = match unit.to_ascii_uppercase().as_str() {
+        "B" => 1.0,
+        "KB" => 1024.0,
+        "MB" => 1024.0 * 1024.0,
+        "GB" => 1024.0 * 1024.0 * 1024.0,
+        "TB" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        _ => return 0,
+    };
+    (number * scale).round() as u64
+}
+
 fn format_duration(seconds: u64) -> String {
     format!(
         "{:02}:{:02}:{:02}",
@@ -224,33 +271,55 @@ fn format_duration(seconds: u64) -> String {
     )
 }
 
-fn device_json(device: &Device) -> Value {
+fn format_size(bytes: u64) -> String {
+    const GB: f64 = 1024.0 * 1024.0 * 1024.0;
+    const MB: f64 = 1024.0 * 1024.0;
+    let value = bytes as f64;
+    if value >= GB {
+        format!("{:.2} GB", value / GB)
+    } else {
+        format!("{:.2} MB", value / MB)
+    }
+}
+
+fn mac_group_json(group: &MacGroup) -> Value {
     json!({
-        "mac": device.mac,
-        "sessions": device.sessions,
-        "last_seen": device.last_seen,
-        "online_seconds": device.online_seconds,
+        "mac": group.mac,
+        "sessions": group.sessions,
+        "last_seen": group.last_seen,
+        "online_seconds": group.online_seconds,
+        "download_bytes": group.download_bytes,
+        "upload_bytes": group.upload_bytes,
     })
 }
 
-fn print_devices(pin: &str, devices: &[Device]) {
+fn print_mac_groups(pin: &str, groups: &[MacGroup]) {
     println!("Card {pin}");
-    if devices.is_empty() {
-        println!("  No devices recorded.");
+    if groups.is_empty() {
+        println!("  No sessions recorded.");
         return;
     }
-    let rows: Vec<[String; 4]> = devices
+    let rows: Vec<[String; 6]> = groups
         .iter()
-        .map(|device| {
+        .map(|group| {
             [
-                device.mac.clone(),
-                device.sessions.to_string(),
-                device.last_seen.clone(),
-                format_duration(device.online_seconds),
+                group.mac.clone(),
+                group.sessions.to_string(),
+                group.last_seen.clone(),
+                format_duration(group.online_seconds),
+                format_size(group.download_bytes),
+                format_size(group.upload_bytes),
             ]
         })
         .collect();
-    let headers = ["MAC", "Sessions", "Last seen", "Online time"];
+    let headers = [
+        "Masked MAC",
+        "Sessions",
+        "Last seen",
+        "Online time",
+        "Download",
+        "Upload",
+    ];
     let widths: Vec<usize> = (0..headers.len())
         .map(|column| {
             rows.iter()
@@ -260,7 +329,7 @@ fn print_devices(pin: &str, devices: &[Device]) {
                 .unwrap_or(0)
         })
         .collect();
-    let print_row = |cells: [&str; 4]| {
+    let print_row = |cells: [&str; 6]| {
         let line: Vec<String> = cells
             .iter()
             .zip(&widths)
@@ -270,7 +339,7 @@ fn print_devices(pin: &str, devices: &[Device]) {
     };
     print_row(headers);
     for row in &rows {
-        print_row([&row[0], &row[1], &row[2], &row[3]]);
+        print_row([&row[0], &row[1], &row[2], &row[3], &row[4], &row[5]]);
     }
 }
 
@@ -281,33 +350,60 @@ mod tests {
     #[test]
     fn groups_sessions_by_mac_keeping_newest_last_seen() {
         let data = json!({"BWStatics": [
-            {"MACs": "30:C5:******40:31", "StartAt": "08/11/2026 15:36:50", "TotalTime": "00:10:00"},
-            {"MACs": "82:C7:******A2:D9", "StartAt": "08/11/2026 00:38:39", "TotalTime": "11:56:36"},
-            {"MACs": "30:C5:******40:31", "StartAt": "07/11/2026 20:31:56", "TotalTime": "04:07:35"},
+            {"MACs": "30:C5:******40:31", "StartAt": "08/11/2026 15:36:50", "TotalTime": "00:10:00", "Download": "1.50 GB", "Upload": "10.00 MB"},
+            {"MACs": "82:C7:******A2:D9", "StartAt": "08/11/2026 00:38:39", "TotalTime": "11:56:36", "Download": "1.09 GB", "Upload": "44.28 MB"},
+            {"MACs": "30:C5:******40:31", "StartAt": "07/11/2026 20:31:56", "TotalTime": "04:07:35", "Download": "512.00 MB", "Upload": "6.00 MB"},
         ]});
         assert_eq!(
-            devices_from(&data),
+            mac_groups_from(&data),
             vec![
-                Device {
+                MacGroup {
                     mac: "30:C5:******40:31".into(),
                     sessions: 2,
                     last_seen: "08/11/2026 15:36:50".into(),
                     online_seconds: 600 + 4 * 3600 + 7 * 60 + 35,
+                    download_bytes: 2 * 1024 * 1024 * 1024,
+                    upload_bytes: 16 * 1024 * 1024,
                 },
-                Device {
+                MacGroup {
                     mac: "82:C7:******A2:D9".into(),
                     sessions: 1,
                     last_seen: "08/11/2026 00:38:39".into(),
                     online_seconds: 11 * 3600 + 56 * 60 + 36,
+                    download_bytes: (1.09_f64 * 1024.0 * 1024.0 * 1024.0).round() as u64,
+                    upload_bytes: (44.28_f64 * 1024.0 * 1024.0).round() as u64,
                 },
             ]
         );
     }
 
     #[test]
-    fn card_without_sessions_has_no_devices() {
-        assert!(devices_from(&json!({"BWStatics": null})).is_empty());
-        assert!(devices_from(&json!({})).is_empty());
+    fn session_with_several_macs_counts_for_each() {
+        let data = json!({"BWStatics": [
+            {"MACs": "AA:**:01, BB:**:02;CC:**:03", "StartAt": "s1", "TotalTime": "00:00:10", "Download": "1.00 MB", "Upload": "1.00 MB"},
+            {"MACs": "BB:**:02", "StartAt": "s0", "TotalTime": "00:00:05", "Download": "1.00 MB", "Upload": "1.00 MB"},
+            {"Download": "1.00 MB"},
+        ]});
+        let groups = mac_groups_from(&data);
+        let summary: Vec<(&str, usize, u64)> = groups
+            .iter()
+            .map(|group| (group.mac.as_str(), group.sessions, group.online_seconds))
+            .collect();
+        assert_eq!(
+            summary,
+            vec![
+                ("AA:**:01", 1, 10),
+                ("BB:**:02", 2, 15),
+                ("CC:**:03", 1, 10),
+                ("unknown", 1, 0),
+            ]
+        );
+    }
+
+    #[test]
+    fn card_without_sessions_has_no_mac_groups() {
+        assert!(mac_groups_from(&json!({"BWStatics": null})).is_empty());
+        assert!(mac_groups_from(&json!({})).is_empty());
     }
 
     #[test]
@@ -324,9 +420,25 @@ mod tests {
     }
 
     #[test]
-    fn malformed_duration_counts_as_zero() {
+    fn malformed_values_count_as_zero() {
         assert_eq!(parse_duration("01:02:03"), 3723);
         assert_eq!(parse_duration("garbage"), 0);
         assert_eq!(parse_duration("1:2"), 0);
+        assert_eq!(parse_size("2.00 KB"), 2048);
+        assert_eq!(parse_size("12"), 0);
+        assert_eq!(parse_size("1.0 PB"), 0);
+    }
+
+    #[test]
+    fn kick_reply_success_and_rejection() {
+        assert_eq!(
+            kick_message(&json!({"result": true, "msg": "Done"})).unwrap(),
+            "Done"
+        );
+        assert_eq!(kick_message(&json!({"result": true})).unwrap(), "Success");
+        let error = kick_message(&json!({"result": false, "code": 2, "msg": "denied"}))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("code 2") && error.contains("denied"));
     }
 }
