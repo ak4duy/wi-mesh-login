@@ -54,15 +54,9 @@ struct MacGroup {
 
 pub fn run_devices(args: DevicesArgs) -> Result<()> {
     let state_dir = args.state_dir.as_deref();
-    let session = reward::authenticate_saved(state_dir)?;
+    let mut session = reward::authenticate_saved(state_dir)?;
     let pins = if args.pins.is_empty() {
-        let reply = reward::post(
-            &session.client,
-            "mycards",
-            &session.device,
-            &session.token,
-            &[("page", "1")],
-        )?;
+        let reply = reward::call(&mut session, "mycards", &[("page", "1")])?;
         let pins = in_use_pins(reward::data(&reply)?)?;
         if pins.is_empty() {
             bail!("no in-use card found in shop account");
@@ -80,7 +74,7 @@ pub fn run_devices(args: DevicesArgs) -> Result<()> {
             failures += 1;
             continue;
         }
-        match usage::card_check(&session, pin) {
+        match usage::card_check(&mut session, pin) {
             Ok(data) => cards.push((pin, mac_groups_from(&data))),
             Err(error) => {
                 eprintln!("Card {pin}: {error:#}");
@@ -123,14 +117,8 @@ pub fn run_kick(args: KickArgs) -> Result<()> {
         bail!("aborted, no device was logged off");
     }
 
-    let session = reward::authenticate_saved(args.state_dir.as_deref())?;
-    let reply = reward::post(
-        &session.client,
-        "card-logout",
-        &session.device,
-        &session.token,
-        &[("key", &args.pin)],
-    )?;
+    let mut session = reward::authenticate_saved(args.state_dir.as_deref())?;
+    let reply = reward::call(&mut session, "card-logout", &[("key", &args.pin)])?;
     let message = kick_message(&reply)?;
     if args.json {
         let output = json!({"pin": args.pin, "result": true, "msg": message});
