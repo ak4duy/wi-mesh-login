@@ -21,9 +21,6 @@ wi-mesh-login YOUR_USERNAME YOUR_PASSWORD --no-logs
 # Keep running: check internet every 60s, log in with the in-use cards when logged out
 wi-mesh-login --auto --interval 60 --retry-after 10 --no-logs
 
-# Pause the card through the shop from 23:00 to 06:00 and resume it after
-wi-mesh-login --auto --night-pause 23:00-06:00
-
 # Also claim the daily shop reward once per day (uses saved shop credentials)
 wi-mesh-login --auto --claim-reward --no-logs
 ```
@@ -32,7 +29,7 @@ Use `wi-mesh-login --help` to see command-line options. The usage is:
 
 ```text
 wi-mesh-login [OPTIONS] <USERNAME> <PASSWORD>
-wi-mesh-login [OPTIONS] --auto [--claim-reward] [--interval SECONDS] [--retry-after SECONDS] [--max-retry-after SECONDS] [--night-pause HH:MM-HH:MM]
+wi-mesh-login [OPTIONS] --auto [--claim-reward] [--interval SECONDS] [--retry-after SECONDS] [--max-retry-after SECONDS]
 wi-mesh-login [OPTIONS] --logout
 ```
 
@@ -49,7 +46,6 @@ Options include:
 | `--interval`        | Seconds between internet checks in `--auto` mode (default 60)    |
 | `--retry-after`     | Seconds before the first retry of a failed `--auto` login, doubled on each failure (default 10) |
 | `--max-retry-after` | Longest wait between failed `--auto` retries (default 300)       |
-| `--night-pause`     | Pause the card through the shop during a local time window (off by default) |
 | `--claim-reward`    | Claim the daily shop reward once per day (see the auto login service below) |
 
 ### Auto mode
@@ -63,8 +59,6 @@ When the internet check fails, `--auto` asks `https://login.net.vn/status` what 
 Failures back off exponentially from `--retry-after` up to `--max-retry-after`, with each wait randomly shortened by up to half. A success resets the backoff.
 
 Cards come from the saved shop account. `--auto` keeps using the card that last worked and moves to the next in-use card when it is exhausted or rejected, wrapping around the list.
-
-`--night-pause 23:00-06:00` calls the shop `card-pause` (1 week) on the card of the live portal session when the window starts and `card-resume` when it ends. No login is attempted inside the window. The window uses the local time zone read at startup and may wrap midnight. The paused card is kept in `night-paused` under the state directory, so a restart still resumes it. If the shop refuses to pause (for example the card does not support pausing) or no session is live, `--auto` stays online and retries every 10 minutes. If the resume fails (for example the shop is unreachable while offline), `--auto` logs in with another card, skipping the paused one, and retries the resume every minute.
 
 ## Session status
 
@@ -157,16 +151,10 @@ wi-mesh-login devices
 
 # List masked MAC groups seen on specific cards, as JSON
 wi-mesh-login devices --json CARD_PIN_1 CARD_PIN_2
-
-# Log every device off a card (asks for confirmation)
-wi-mesh-login kick CARD_PIN
-
-# Skip the confirmation prompt
-wi-mesh-login kick --yes --json CARD_PIN
 ```
 
 > [!NOTE]  
-> **The shop has no live device list.** `devices` groups the card's bandwidth sessions by the masked MAC label the shop returns (for example `30:C5:******40:31`), with sessions, last seen, online time, download and upload per group. It shows what was seen on the card, not what is connected right now. If a session lists several MACs separated by commas, semicolons or spaces, it counts for each. `kick` logs every device off the card, including the one you run it from.
+> **The shop has no live device list.** `devices` groups the card's bandwidth sessions by the masked MAC label the shop returns (for example `30:C5:******40:31`), with sessions, last seen, online time, download and upload per group. It shows what was seen on the card, not what is connected right now. If a session lists several MACs separated by commas, semicolons or spaces, it counts for each.
 
 ## Data alerts
 
