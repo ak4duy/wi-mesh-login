@@ -127,6 +127,29 @@ wi-mesh-login usage CARD_PIN
 # Query multiple cards and include sessions.
 wi-mesh-login usage --sessions CARD_PIN_1 CARD_PIN_2
 ```
+
+## Card devices
+
+> [!IMPORTANT]  
+> **Run `wi-mesh-login shop --login` once to save your shop credentials before using these commands**
+
+```sh
+# List devices seen on every in-use card
+wi-mesh-login devices
+
+# List devices seen on specific cards, as JSON
+wi-mesh-login devices --json CARD_PIN_1 CARD_PIN_2
+
+# Log every device off a card (asks for confirmation)
+wi-mesh-login kick CARD_PIN
+
+# Skip the confirmation prompt
+wi-mesh-login kick --yes --json CARD_PIN
+```
+
+> [!NOTE]  
+> **The shop has no live device list.** `devices` groups the card's bandwidth sessions by (masked) MAC address, so it shows devices that used the card, not only the ones online right now. `kick` also logs off the device you run it from.
+
 ## Data alerts
 
 > [!IMPORTANT]  
