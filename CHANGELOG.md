@@ -1,3 +1,35 @@
+## [0.4.0] - 2026-11-08
+
+### Features
+
+- feat(reward): refresh expired shop session and retry the request ff70989 
+- feat(auto): probe portal, back off, rotate cards and pause at night faa3af8 
+- feat(auto): claim daily shop reward with --claim-reward c09fbcc 
+- feat(devices): add devices and kick subcommands 57ca51c 
+- feat(status): add read-only status subcommand dd9b2fe 
+
+### Bug Fixes
+
+- fix(auto): keep logging in when night resume fails and pause the live card 7fc41a4 
+- fix(night): call shop endpoints through the refreshing session 543b1f7 
+- fix(devices): skip unused cards when no PIN is given 662b256 
+- fix(shop): remove kick and --night-pause cdc33c3 
+
+### Refactor
+
+- refactor(devices): report masked MAC groups with traffic totals b7cb856 
+- refactor(devices): use reward::call with a refreshable session 7bc7b6e 
+
+### Styling
+
+- style(devices): use clap attributes instead of doc comments 4617041 
+
+### Miscellaneous
+
+- chore(changelog): drop hand-written unreleased entry 76d6f6e 
+
+
+#### Full Changelog: https://github.com/ak4duy/wi-mesh-login/compare/v0.3.8...v0.4.0
 ## [0.3.8] - 2026-11-07
 
 ### Features
