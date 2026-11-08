@@ -11,6 +11,7 @@ use clap::{Parser, Subcommand};
 
 mod auto;
 mod auto_reward;
+mod devices;
 mod monitor;
 mod night;
 mod refresh;
@@ -94,6 +95,8 @@ enum Command {
     Shop(reward::ShopArgs),
     /// Query MyWIFI card usage
     Usage(usage::UsageArgs),
+    Devices(devices::DevicesArgs),
+    Kick(devices::KickArgs),
     /// Send a Discord alert when a card is running out of data
     Monitor(monitor::MonitorArgs),
 }
@@ -140,6 +143,8 @@ fn main() -> Result<()> {
     match args.command {
         Some(Command::Shop(shop_args)) => return reward::run(shop_args),
         Some(Command::Usage(usage_args)) => return usage::run(usage_args),
+        Some(Command::Devices(devices_args)) => return devices::run_devices(devices_args),
+        Some(Command::Kick(kick_args)) => return devices::run_kick(kick_args),
         Some(Command::Monitor(monitor_args)) => return monitor::run(monitor_args),
         None => {}
     }
