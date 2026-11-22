@@ -92,6 +92,7 @@ enum Command {
     /// Query MyWIFI card usage
     Usage(usage::UsageArgs),
     Devices(devices::DevicesArgs),
+    Kick(devices::KickArgs),
     /// Send a Discord alert when a card is running out of data
     Monitor(monitor::MonitorArgs),
     /// Show the current session from the portal status page
@@ -141,6 +142,7 @@ fn main() -> Result<()> {
         Some(Command::Shop(shop_args)) => return reward::run(shop_args),
         Some(Command::Usage(usage_args)) => return usage::run(usage_args),
         Some(Command::Devices(devices_args)) => return devices::run_devices(devices_args),
+        Some(Command::Kick(kick_args)) => return devices::run_kick(kick_args),
         Some(Command::Monitor(monitor_args)) => return monitor::run(monitor_args),
         Some(Command::Status(status_args)) => return status::run(status_args),
         None => {}

@@ -151,10 +151,18 @@ wi-mesh-login devices
 
 # List masked MAC groups seen on specific cards, as JSON
 wi-mesh-login devices --json CARD_PIN_1 CARD_PIN_2
+
+# Log every device off a card (asks for confirmation)
+wi-mesh-login kick CARD_PIN
+
+# Skip the confirmation prompt
+wi-mesh-login kick --yes --json CARD_PIN
 ```
 
 > [!NOTE]  
 > **The shop has no live device list.** `devices` groups the card's bandwidth sessions by the masked MAC label the shop returns (for example `30:C5:******40:31`), with sessions, last seen, online time, download and upload per group. It shows what was seen on the card, not what is connected right now. If a session lists several MACs separated by commas, semicolons or spaces, it counts for each.
+
+`kick` calls the shop `card-logout` and logs every device off the card, including the one you run it from. The card must belong to the saved shop account: the shop only accepts the request with the `time`, `hash` and `user` values it signs into the card's detail URL in `mycards`.
 
 ## Data alerts
 
